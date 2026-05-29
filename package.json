@@ -1,0 +1,10 @@
+{
+  "name": "bar-leaderboard-clean",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "data": "python3 -m pipeline.run --output site/data",
+    "data:local": "python3 -m pipeline.run --source-dir ../data --output site/data",
+    "dev": "python3 -m http.server 4173 --directory site"
+  }
+}

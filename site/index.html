@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BAR Leaderboard</title>
+    <link rel="stylesheet" href="assets/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="app-header">
+      <div class="brand">
+        <img src="assets/logo.png" width="48" height="48" alt="BAR leaderboard logo">
+        <div>
+          <h1>BAR Leaderboard</h1>
+          <p id="sourceRange">Loading data</p>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Rankings">
+        <button class="tab active" type="button" data-view="players" aria-selected="true">Players</button>
+        <button class="tab" type="button" data-view="nations" aria-selected="false">Nations</button>
+        <button class="tab" type="button" data-view="teams" aria-selected="false">Teams</button>
+        <button class="tab" type="button" data-view="efficiency" aria-selected="false">Efficiency</button>
+      </nav>
+    </header>
+
+    <main id="main" class="app-main">
+      <section class="summary-grid" aria-label="Data summary">
+        <div class="stat">
+          <span class="stat-label">Players</span>
+          <strong id="statPlayers">-</strong>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Nations</span>
+          <strong id="statNations">-</strong>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Teams</span>
+          <strong id="statTeams">-</strong>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Updated</span>
+          <strong id="statUpdated">-</strong>
+        </div>
+      </section>
+
+      <div id="appError" class="alert" hidden></div>
+
+      <section id="view-players" class="view active" aria-labelledby="playersTitle">
+        <div class="view-header">
+          <h2 id="playersTitle">Player Rankings</h2>
+          <div class="mode-group" id="playerModes" aria-label="Player game mode"></div>
+        </div>
+        <div class="toolbar">
+          <label>
+            <span>Country</span>
+            <select id="playerCountry"></select>
+          </label>
+          <label>
+            <span>Search</span>
+            <input id="playerSearch" type="search" autocomplete="off">
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Country</th>
+                <th>Rating</th>
+                <th>Games</th>
+                <th>Win Rate</th>
+                <th>Last Played</th>
+              </tr>
+            </thead>
+            <tbody id="playerRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="view-nations" class="view" aria-labelledby="nationsTitle" hidden>
+        <div class="view-header">
+          <h2 id="nationsTitle">Nation Rankings</h2>
+          <div class="mode-group" id="nationModes" aria-label="Nation game mode"></div>
+        </div>
+        <div class="toolbar">
+          <label>
+            <span>Search</span>
+            <input id="nationSearch" type="search" autocomplete="off">
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Nation</th>
+                <th>Score</th>
+                <th>Avg Rating</th>
+                <th>Players</th>
+                <th>Games</th>
+                <th>Top Contributors</th>
+              </tr>
+            </thead>
+            <tbody id="nationRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="view-teams" class="view" aria-labelledby="teamsTitle" hidden>
+        <div class="view-header">
+          <h2 id="teamsTitle">Team Rankings</h2>
+          <div class="mode-group" id="teamModes" aria-label="Team game mode"></div>
+        </div>
+        <div class="toolbar">
+          <label>
+            <span>Search</span>
+            <input id="teamSearch" type="search" autocomplete="off">
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Core</th>
+                <th>Mode</th>
+                <th>Score</th>
+                <th>Games</th>
+                <th>Avg Rating</th>
+                <th>Top Map</th>
+              </tr>
+            </thead>
+            <tbody id="teamRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="view-efficiency" class="view" aria-labelledby="efficiencyTitle" hidden>
+        <div class="view-header">
+          <h2 id="efficiencyTitle">Efficiency Analysis</h2>
+        </div>
+        <div class="toolbar efficiency-toolbar">
+          <label>
+            <span>Faction</span>
+            <select id="efficiencyFaction">
+              <option value="ARM">Armada</option>
+              <option value="COR">Cortex</option>
+            </select>
+          </label>
+          <label>
+            <span>Speed <output id="efficiencySpeedValue" for="efficiencySpeed">15</output></span>
+            <input id="efficiencySpeed" type="range" min="1" max="30" value="15">
+          </label>
+          <label>
+            <span>Metric</span>
+            <select id="efficiencyMetric">
+              <option value="metal_efficiency">Metal</option>
+              <option value="time_efficiency">Time</option>
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Generator</th>
+                <th>Output</th>
+                <th>Metal</th>
+                <th>Build Time</th>
+                <th>Metal Eff.</th>
+                <th>Time Eff.</th>
+              </tr>
+            </thead>
+            <tbody id="efficiencyRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="assets/app.js"></script>
+  </body>
+</html>
