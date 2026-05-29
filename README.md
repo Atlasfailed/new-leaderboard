@@ -7,7 +7,7 @@ Static Cloudflare Pages build for BAR rankings. The project has no Flask server:
 - `pipeline/` - modular Python data download, cleaning, ranking, and JSON export.
 - `pipeline/reference/` - small static reference files used by the pipeline.
 - `site/` - static HTML/CSS/JS frontend.
-- `.github/workflows/update-and-deploy.yml` - scheduled data refresh and Cloudflare Pages deploy.
+- `.github/workflows/update-and-deploy.yml` - Tuesday/Saturday data refresh and Cloudflare Pages deploy.
 
 ## Local Data Build
 
@@ -41,6 +41,8 @@ Required GitHub secrets:
 - `CLOUDFLARE_ACCOUNT_ID`
 
 The Cloudflare Pages project name in the workflow is `bar-leaderboard`. Change the `--project-name` value if the Cloudflare project uses a different name.
+
+The workflow runs at 10:35 UTC every Tuesday and Saturday, on every push to `main`, and manually through `workflow_dispatch`.
 
 ## Data Outputs
 

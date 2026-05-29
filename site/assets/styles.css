@@ -265,9 +265,6 @@ td {
 }
 
 th {
-  position: sticky;
-  top: 85px;
-  z-index: 1;
   background: var(--surface-strong);
   color: #33413c;
   font-size: 0.78rem;
@@ -328,9 +325,6 @@ tbody tr:last-child td {
     flex-direction: column;
   }
 
-  th {
-    top: 0;
-  }
 }
 
 @media (max-width: 560px) {
@@ -352,4 +346,3 @@ tbody tr:last-child td {
     min-width: 0;
   }
 }
-
