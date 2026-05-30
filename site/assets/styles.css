@@ -205,6 +205,30 @@ h2 {
   margin: 4px 0 16px;
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.help-button {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.help-button:hover {
+  border-color: rgba(23, 107, 93, 0.45);
+  background: #f0f7f5;
+}
+
 .toolbar {
   display: flex;
   align-items: end;
@@ -307,6 +331,82 @@ tbody tr:last-child td {
 .empty {
   padding: 22px 14px;
   color: var(--muted);
+}
+
+.help-dialog {
+  width: min(720px, calc(100% - 32px));
+  max-height: min(760px, calc(100% - 32px));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.help-dialog::backdrop {
+  background: rgba(18, 28, 25, 0.42);
+}
+
+.help-panel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 26px 72px rgba(18, 28, 25, 0.24);
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-strong);
+}
+
+.icon-button {
+  width: 40px;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.help-body {
+  display: grid;
+  gap: 18px;
+  max-height: min(620px, calc(100vh - 140px));
+  overflow: auto;
+  padding: 20px;
+}
+
+.help-section h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.help-section ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.help-section li {
+  margin: 6px 0;
+}
+
+.formula {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f8faf8;
+  color: #33413c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  overflow-x: auto;
 }
 
 @media (max-width: 900px) {

@@ -23,6 +23,104 @@ const paths = {
 
 const DATE_LOCALE = "en-US";
 
+const helpContent = {
+  players: {
+    title: "Player Rankings",
+    sections: [
+      {
+        heading: "Who is included",
+        items: [
+          "Only ranked datamart games with a recognized game mode are used.",
+          "Current uses games from the last 30 days of the newest datamart timestamp.",
+          "Year views use anyone who played at least one ranked game in that UTC calendar year.",
+          "Players are grouped by selected game mode. Country filtering changes the visible rank to the player's country rank.",
+        ],
+      },
+      {
+        heading: "How rank is calculated",
+        items: [
+          "For each player and mode, the latest rating row inside the selected period is used.",
+          "The displayed rating is skill minus uncertainty.",
+          "Players are ranked highest to lowest by that rating, with dense ranks for ties.",
+          "Win rate uses the datamart winning team when available; the pipeline infers winners from rating changes when needed.",
+        ],
+        formula: "rating = latest new_skill - latest new_uncertainty",
+      },
+    ],
+  },
+  nations: {
+    title: "Nation Rankings",
+    sections: [
+      {
+        heading: "Who is included",
+        items: [
+          "Only players with a valid country code are included.",
+          "A player must have at least one ranked game in the selected period and mode.",
+          "A nation must have at least three included players to appear.",
+          "Current and year periods use the same inclusion rules as the player leaderboard.",
+        ],
+      },
+      {
+        heading: "How score is calculated",
+        items: [
+          "Each included player's rating is their latest skill minus uncertainty inside the selected period and mode.",
+          "Top 10 rating is the average rating of the country's ten highest rated included players, or fewer if the nation has fewer than ten.",
+          "Average rating uses all included players from that country.",
+          "The final score is confidence adjusted so very small countries are not over-weighted.",
+          "Total games is the sum of included player game counts, not unique national matches.",
+        ],
+        formula: "score = round(((top10_rating * 0.7 + avg_rating * 0.3) * 100) * min(1, log1p(player_count) / log1p(10)))",
+      },
+    ],
+  },
+  teams: {
+    title: "Team Rankings",
+    sections: [
+      {
+        heading: "Who is included",
+        items: [
+          "Only Large Team and Small Team ranked datamart games are used.",
+          "Teams are exact datamart party rosters from party_id, not replay-derived guesses.",
+          "Duo, Triple, and Quad rankings are split by exact roster size.",
+          "A roster must have at least eight games in the selected period, mode, and size to appear.",
+        ],
+      },
+      {
+        heading: "How score is calculated",
+        items: [
+          "The roster's player rating is the average of each member's latest rating in that period and mode.",
+          "Games adds up appearances by the exact same roster.",
+          "The score combines roster strength with a smaller activity bonus.",
+          "Ranks are calculated separately for each game mode and roster size.",
+          "Win rate uses the datamart winning team or the pipeline's rating-delta inference when needed.",
+        ],
+        formula: "score = round(avg_player_rating * 100 + log1p(games) * 300)",
+      },
+    ],
+  },
+  efficiency: {
+    title: "Efficiency Analysis",
+    sections: [
+      {
+        heading: "What is included",
+        items: [
+          "This view uses the static unit efficiency reference file, not player match data.",
+          "Rows are filtered by selected faction and wind or tidal speed.",
+          "The selected metric controls the sort order.",
+        ],
+      },
+      {
+        heading: "How rank is calculated",
+        items: [
+          "Metal ranking sorts by metal efficiency from highest to lowest.",
+          "Time ranking sorts by time efficiency from highest to lowest.",
+          "Output, metal cost, and build time are shown so the ranking can be checked against raw values.",
+        ],
+      },
+    ],
+  },
+};
+
 const elements = {};
 
 document.addEventListener("DOMContentLoaded", init);
@@ -30,6 +128,7 @@ document.addEventListener("DOMContentLoaded", init);
 async function init() {
   bindElements();
   bindTabs();
+  bindHelpDialog();
 
   try {
     const [metadata, countries, efficiency] = await Promise.all([
@@ -77,6 +176,10 @@ function bindElements() {
     "efficiencySpeedValue",
     "efficiencyMetric",
     "efficiencyRows",
+    "rankingHelp",
+    "helpTitle",
+    "helpBody",
+    "helpClose",
   ].forEach((id) => {
     elements[id] = document.getElementById(id);
   });
@@ -97,6 +200,24 @@ function bindTabs() {
         section.hidden = !active;
       });
     });
+  });
+}
+
+function bindHelpDialog() {
+  document.querySelectorAll("[data-help]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openHelp(button.dataset.help);
+    });
+  });
+
+  elements.helpClose.addEventListener("click", () => {
+    elements.rankingHelp.close();
+  });
+
+  elements.rankingHelp.addEventListener("click", (event) => {
+    if (event.target === elements.rankingHelp) {
+      elements.rankingHelp.close();
+    }
   });
 }
 
@@ -178,6 +299,24 @@ function renderAll() {
   renderNations();
   renderTeams();
   renderEfficiency();
+}
+
+function openHelp(key) {
+  const content = helpContent[key];
+  if (!content) {
+    return;
+  }
+  elements.helpTitle.textContent = content.title;
+  elements.helpBody.innerHTML = content.sections
+    .map(
+      (section) => `<section class="help-section">
+        <h3>${escapeHtml(section.heading)}</h3>
+        <ul>${section.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+        ${section.formula ? `<div class="formula">${escapeHtml(section.formula)}</div>` : ""}
+      </section>`
+    )
+    .join("");
+  elements.rankingHelp.showModal();
 }
 
 function renderModeButtons(container, modes, activeMode, onSelect) {
