@@ -21,6 +21,8 @@ const paths = {
   efficiency: "data/efficiency_analysis.json",
 };
 
+const DATE_LOCALE = "en-US";
+
 const elements = {};
 
 document.addEventListener("DOMContentLoaded", init);
@@ -417,7 +419,7 @@ function formatDate(value) {
   if (!value) {
     return "-";
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(DATE_LOCALE, {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -428,7 +430,7 @@ function formatDateTime(value) {
   if (!value) {
     return "-";
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(DATE_LOCALE, {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
