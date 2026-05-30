@@ -87,7 +87,7 @@ const helpContent = {
         items: [
           "The score combines three things: the players' rating, the difficulty of their opponents, and win rate.",
           "Difficulty means the average rating of the opponents that roster faced.",
-          "Beating stronger opponents and keeping a higher win rate both help the team rank higher.",
+          "Facing stronger opponents and having a higher win rate both help the team rank higher.",
           "The same players must be in the roster for games to count toward that team.",
           "Teams are ranked separately for each mode and roster size.",
         ],
