@@ -15,13 +15,26 @@ from .config import (
 )
 from .clean import PreparedData
 
-TEAM_RATING_SCORE_WEIGHT = 60
-TEAM_DIFFICULTY_SCORE_WEIGHT = 30
-TEAM_WIN_RATE_SCORE_WEIGHT = 2500
+TEAM_RATING_SCORE_WEIGHT = 70
+TEAM_DIFFICULTY_SCORE_WEIGHT = 35
+TEAM_PERFORMANCE_SCORE_WEIGHT = 2000
+TEAM_EXPECTED_WIN_RATE_SCALE = 12
+TEAM_WIN_RATE_PRIOR_GAMES = 16
 
 
 def _rank_within_group(frame: pd.DataFrame, group_cols: list[str], score_col: str, rank_col: str) -> pd.Series:
     return frame.groupby(group_cols)[score_col].rank(method="dense", ascending=False).astype(int).rename(rank_col)
+
+
+def _expected_win_rate(team_rating: float, opponent_rating: float) -> float:
+    rating_gap = np.clip((team_rating - opponent_rating) / TEAM_EXPECTED_WIN_RATE_SCALE, -6, 6)
+    return float(1 / (1 + np.exp(-rating_gap)))
+
+
+def _adjusted_win_rate(wins: int, decided_games: int) -> float:
+    if decided_games <= 0:
+        return 0.5
+    return float((wins + TEAM_WIN_RATE_PRIOR_GAMES * 0.5) / (decided_games + TEAM_WIN_RATE_PRIOR_GAMES))
 
 
 def team_size_label(size: int) -> str:
@@ -277,7 +290,7 @@ def build_nation_rankings(
     return pd.concat(rankings, ignore_index=True) if rankings else pd.DataFrame()
 
 
-def _build_opponent_difficulty_lookup(data: pd.DataFrame) -> dict[tuple[int, int], float]:
+def _build_matchup_lookup(data: pd.DataFrame) -> dict[tuple[int, int], dict[str, float]]:
     required = {"match_id", "team_id", "old_skill", "old_uncertainty", "new_skill", "new_uncertainty"}
     if not required.issubset(data.columns):
         return {}
@@ -308,10 +321,19 @@ def _build_opponent_difficulty_lookup(data: pd.DataFrame) -> dict[tuple[int, int
     team_ratings["opponent_difficulty"] = (
         team_ratings["match_rating_sum"] - team_ratings["team_match_rating"]
     ) / (team_ratings["team_count"] - 1)
+    rating_gap = np.clip(
+        (team_ratings["team_match_rating"] - team_ratings["opponent_difficulty"]) / TEAM_EXPECTED_WIN_RATE_SCALE,
+        -6,
+        6,
+    )
+    team_ratings["expected_win_rate"] = 1 / (1 + np.exp(-rating_gap))
     return {
-        (int(row.match_id), int(row.team_id)): float(row.opponent_difficulty)
+        (int(row.match_id), int(row.team_id)): {
+            "opponent_difficulty": float(row.opponent_difficulty),
+            "expected_win_rate": float(row.expected_win_rate),
+        }
         for row in team_ratings.itertuples(index=False)
-        if not pd.isna(row.opponent_difficulty)
+        if not pd.isna(row.opponent_difficulty) and not pd.isna(row.expected_win_rate)
     }
 
 
@@ -340,6 +362,8 @@ def _build_team_rankings_for_data(
             "wins": 0,
             "opponent_difficulty_sum": 0.0,
             "opponent_difficulty_count": 0,
+            "expected_win_rate_sum": 0.0,
+            "expected_win_rate_count": 0,
             "last_played": pd.Timestamp.min.tz_localize("UTC"),
             "maps": defaultdict(int),
         }
@@ -351,7 +375,7 @@ def _build_team_rankings_for_data(
     if party_rows.empty:
         return pd.DataFrame()
 
-    opponent_difficulty_lookup = _build_opponent_difficulty_lookup(data)
+    matchup_lookup = _build_matchup_lookup(data)
     grouped = party_rows[
         ["match_id", "team_id", "party_id", "game_mode", "start_time", "map", "user_id", "won"]
     ].drop_duplicates()
@@ -373,10 +397,12 @@ def _build_team_rankings_for_data(
         if not won_values.empty:
             item["decided_games"] += 1
             item["wins"] += int(float(won_values.iloc[0]) > 0)
-        opponent_difficulty = opponent_difficulty_lookup.get((int(match_id), int(team_id)))
-        if opponent_difficulty is not None:
-            item["opponent_difficulty_sum"] += opponent_difficulty
+        matchup = matchup_lookup.get((int(match_id), int(team_id)))
+        if matchup is not None:
+            item["opponent_difficulty_sum"] += matchup["opponent_difficulty"]
             item["opponent_difficulty_count"] += 1
+            item["expected_win_rate_sum"] += matchup["expected_win_rate"]
+            item["expected_win_rate_count"] += 1
         if last_played > item["last_played"]:
             item["last_played"] = last_played
         if map_name:
@@ -400,11 +426,17 @@ def _build_team_rankings_for_data(
             else np.nan
         )
         difficulty_for_score = avg_opponent_rating if not np.isnan(avg_opponent_rating) else avg_rating
-        win_rate_for_score = win_rate if not np.isnan(win_rate) else 0.5
+        expected_win_rate = (
+            float(item["expected_win_rate_sum"]) / int(item["expected_win_rate_count"])
+            if int(item["expected_win_rate_count"])
+            else _expected_win_rate(avg_rating, difficulty_for_score)
+        )
+        adjusted_win_rate = _adjusted_win_rate(wins, decided_games)
+        performance_vs_expected = adjusted_win_rate - expected_win_rate
         score = round(
             avg_rating * TEAM_RATING_SCORE_WEIGHT
             + difficulty_for_score * TEAM_DIFFICULTY_SCORE_WEIGHT
-            + win_rate_for_score * TEAM_WIN_RATE_SCORE_WEIGHT
+            + performance_vs_expected * TEAM_PERFORMANCE_SCORE_WEIGHT
         )
         roster = []
         for user_id in roster_ids:
@@ -430,6 +462,9 @@ def _build_team_rankings_for_data(
                 "win_rate": win_rate,
                 "avg_rating": round(avg_rating, 2),
                 "avg_opponent_rating": round(avg_opponent_rating, 2) if not np.isnan(avg_opponent_rating) else np.nan,
+                "expected_win_rate": expected_win_rate,
+                "adjusted_win_rate": adjusted_win_rate,
+                "performance_vs_expected": performance_vs_expected,
                 "score": score,
                 "last_played": item["last_played"],
                 "top_map": maps[0][0] if maps else "",
@@ -441,8 +476,8 @@ def _build_team_rankings_for_data(
 
     ranking = pd.DataFrame(records)
     ranking = ranking.sort_values(
-        ["game_mode", "roster_size", "score", "win_rate", "avg_opponent_rating", "games"],
-        ascending=[True, True, False, False, False, False],
+        ["game_mode", "roster_size", "score", "performance_vs_expected", "win_rate", "avg_opponent_rating", "games"],
+        ascending=[True, True, False, False, False, False, False],
     )
     ranking["rank"] = _rank_within_group(ranking, ["game_mode", "roster_size"], "score", "rank")
     ranking = (
@@ -463,6 +498,9 @@ def _build_team_rankings_for_data(
             "win_rate",
             "avg_rating",
             "avg_opponent_rating",
+            "expected_win_rate",
+            "adjusted_win_rate",
+            "performance_vs_expected",
             "score",
             "last_played",
             "top_map",
