@@ -7,10 +7,10 @@ import numpy as np
 import pandas as pd
 
 from .config import (
+    DEFAULT_CURRENT_WINDOW_DAYS,
     DEFAULT_MIN_NATION_PLAYER_GAMES,
     DEFAULT_MIN_PLAYER_GAMES,
     DEFAULT_MIN_TEAM_GAMES,
-    DEFAULT_TEAM_WINDOW_DAYS,
     ENERGY_EFFICIENCY_PATH,
     TEAM_MODES,
 )
@@ -21,11 +21,55 @@ def _rank_within_group(frame: pd.DataFrame, group_cols: list[str], score_col: st
     return frame.groupby(group_cols)[score_col].rank(method="dense", ascending=False).astype(int).rename(rank_col)
 
 
-def build_player_rankings(prepared: PreparedData, min_games: int = DEFAULT_MIN_PLAYER_GAMES) -> pd.DataFrame:
-    data = prepared.ranked.dropna(subset=["new_skill", "new_uncertainty"]).copy()
+def build_periods(prepared: PreparedData, current_window_days: int = DEFAULT_CURRENT_WINDOW_DAYS) -> list[dict[str, object]]:
+    data = prepared.ranked.dropna(subset=["start_time"])
     if data.empty:
-        return pd.DataFrame()
+        return []
 
+    latest = data["start_time"].max()
+    current_start = latest - pd.Timedelta(days=current_window_days)
+    periods: list[dict[str, object]] = [
+        {
+            "id": "current",
+            "label": "Current",
+            "description": f"Last {current_window_days} days",
+            "type": "current",
+            "from": current_start,
+            "to": latest,
+        }
+    ]
+
+    years = sorted(data["start_time"].dt.year.dropna().astype(int).unique(), reverse=True)
+    for year in years:
+        periods.append(
+            {
+                "id": str(year),
+                "label": str(year),
+                "description": f"Games played in {year}",
+                "type": "year",
+                "year": int(year),
+                "from": pd.Timestamp(year=year, month=1, day=1, tz="UTC"),
+                "to": pd.Timestamp(year=year, month=12, day=31, hour=23, minute=59, second=59, tz="UTC"),
+            }
+        )
+
+    return periods
+
+
+def _period_data(data: pd.DataFrame, period: dict[str, object]) -> pd.DataFrame:
+    if period["type"] == "current":
+        return data[(data["start_time"] >= period["from"]) & (data["start_time"] <= period["to"])].copy()
+    return data[data["start_time"].dt.year == int(period["year"])].copy()
+
+
+def _with_period(frame: pd.DataFrame, period: dict[str, object]) -> pd.DataFrame:
+    frame = frame.copy()
+    frame["period"] = period["id"]
+    frame["period_label"] = period["label"]
+    return frame
+
+
+def _build_player_rankings_for_data(data: pd.DataFrame, min_games: int) -> pd.DataFrame:
     stats = (
         data.groupby(["game_mode", "user_id"], as_index=False)
         .agg(
@@ -86,11 +130,28 @@ def build_player_rankings(prepared: PreparedData, min_games: int = DEFAULT_MIN_P
     ]
 
 
-def build_nation_rankings(
+def build_player_rankings(
     prepared: PreparedData,
-    min_player_games: int = DEFAULT_MIN_NATION_PLAYER_GAMES,
+    periods: list[dict[str, object]],
+    min_games: int = DEFAULT_MIN_PLAYER_GAMES,
 ) -> pd.DataFrame:
     data = prepared.ranked.dropna(subset=["new_skill", "new_uncertainty"]).copy()
+    if data.empty:
+        return pd.DataFrame()
+
+    rankings = []
+    for period in periods:
+        period_rows = _period_data(data, period)
+        if period_rows.empty:
+            continue
+        ranking = _build_player_rankings_for_data(period_rows, min_games)
+        if not ranking.empty:
+            rankings.append(_with_period(ranking, period))
+
+    return pd.concat(rankings, ignore_index=True) if rankings else pd.DataFrame()
+
+
+def _build_nation_rankings_for_data(data: pd.DataFrame, min_player_games: int) -> pd.DataFrame:
     data = data[data["country"].fillna("") != ""]
     if data.empty:
         return pd.DataFrame()
@@ -183,20 +244,33 @@ def build_nation_rankings(
     ].sort_values(["game_mode", "rank"])
 
 
-def build_team_rankings(
+def build_nation_rankings(
     prepared: PreparedData,
-    min_games: int = DEFAULT_MIN_TEAM_GAMES,
-    window_days: int = DEFAULT_TEAM_WINDOW_DAYS,
-    top_per_mode: int = 500,
+    periods: list[dict[str, object]],
+    min_player_games: int = DEFAULT_MIN_NATION_PLAYER_GAMES,
 ) -> pd.DataFrame:
-    data = prepared.ranked[prepared.ranked["game_mode"].isin(TEAM_MODES)].copy()
+    data = prepared.ranked.dropna(subset=["new_skill", "new_uncertainty"]).copy()
     if data.empty:
         return pd.DataFrame()
 
-    cutoff = data["start_time"].max() - pd.Timedelta(days=window_days)
-    data = data[data["start_time"] >= cutoff].copy()
-    player_lookup = prepared.players.set_index("user_id").to_dict("index")
+    rankings = []
+    for period in periods:
+        period_rows = _period_data(data, period)
+        if period_rows.empty:
+            continue
+        ranking = _build_nation_rankings_for_data(period_rows, min_player_games)
+        if not ranking.empty:
+            rankings.append(_with_period(ranking, period))
 
+    return pd.concat(rankings, ignore_index=True) if rankings else pd.DataFrame()
+
+
+def _build_team_rankings_for_data(
+    data: pd.DataFrame,
+    player_lookup: dict[int, dict[str, object]],
+    min_games: int,
+    top_per_mode: int,
+) -> pd.DataFrame:
     latest_ratings = (
         data.dropna(subset=["new_skill", "new_uncertainty"])
         .sort_values("start_time")
@@ -291,6 +365,29 @@ def build_team_rankings(
             "top_map",
         ]
     ]
+
+
+def build_team_rankings(
+    prepared: PreparedData,
+    periods: list[dict[str, object]],
+    min_games: int = DEFAULT_MIN_TEAM_GAMES,
+    top_per_mode: int = 500,
+) -> pd.DataFrame:
+    data = prepared.ranked[prepared.ranked["game_mode"].isin(TEAM_MODES)].copy()
+    if data.empty:
+        return pd.DataFrame()
+
+    player_lookup = prepared.players.set_index("user_id").to_dict("index")
+    rankings = []
+    for period in periods:
+        period_rows = _period_data(data, period)
+        if period_rows.empty:
+            continue
+        ranking = _build_team_rankings_for_data(period_rows, player_lookup, min_games, top_per_mode)
+        if not ranking.empty:
+            rankings.append(_with_period(ranking, period))
+
+    return pd.concat(rankings, ignore_index=True) if rankings else pd.DataFrame()
 
 
 def build_efficiency_analysis(path=ENERGY_EFFICIENCY_PATH) -> pd.DataFrame:

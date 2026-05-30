@@ -48,11 +48,13 @@ The workflow runs at 10:35 UTC every Tuesday and Saturday, on every push to `mai
 
 - `metadata.json`
 - `countries.json`
-- `player_rankings.json`
-- `nation_rankings.json`
-- `team_rankings.json`
+- `player_rankings_current.json` and `player_rankings_<year>.json`
+- `nation_rankings_current.json` and `nation_rankings_<year>.json`
+- `team_rankings_current.json` and `team_rankings_<year>.json`
 - `efficiency_analysis.json`
 
 The generated JSON files are intentionally ignored by Git; Actions regenerates them before every deployment.
 
 The pipeline uses the BAR datamarts only. Nation and team rankings are rating/activity based so they do not depend on replay JSON or winner fields.
+
+Ranking pages default to `Current`, which is generated from players with games in the last 30 days of the newest datamart timestamp. Year options are generated from UTC calendar years and include players who played during that year.

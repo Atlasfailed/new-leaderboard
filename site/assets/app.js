@@ -1,21 +1,22 @@
 const state = {
   metadata: null,
   countries: [],
-  players: [],
-  nations: [],
-  teams: [],
+  playersByPeriod: {},
+  nationsByPeriod: {},
+  teamsByPeriod: {},
   efficiency: [],
+  periods: [],
   playerMode: null,
   nationMode: null,
   teamMode: null,
+  playerPeriod: "current",
+  nationPeriod: "current",
+  teamPeriod: "current",
 };
 
 const paths = {
   metadata: "data/metadata.json",
   countries: "data/countries.json",
-  players: "data/player_rankings.json",
-  nations: "data/nation_rankings.json",
-  teams: "data/team_rankings.json",
   efficiency: "data/efficiency_analysis.json",
 };
 
@@ -28,23 +29,19 @@ async function init() {
   bindTabs();
 
   try {
-    const [metadata, countries, players, nations, teams, efficiency] = await Promise.all([
+    const [metadata, countries, efficiency] = await Promise.all([
       fetchJson(paths.metadata),
       fetchJson(paths.countries),
-      fetchJson(paths.players),
-      fetchJson(paths.nations),
-      fetchJson(paths.teams),
       fetchJson(paths.efficiency),
     ]);
 
     state.metadata = metadata;
     state.countries = countries.countries || [];
-    state.players = players.players || [];
-    state.nations = nations.nations || [];
-    state.teams = teams.teams || [];
     state.efficiency = efficiency.units || [];
+    state.periods = metadata.periods || [{ id: "current", label: "Current", description: "Last 30 days" }];
 
     initializeControls();
+    await loadPeriodData(defaultPeriod());
     renderSummary();
     renderAll();
   } catch (error) {
@@ -64,6 +61,9 @@ function bindElements() {
     "playerModes",
     "nationModes",
     "teamModes",
+    "playerPeriod",
+    "nationPeriod",
+    "teamPeriod",
     "playerCountry",
     "playerSearch",
     "nationSearch",
@@ -108,10 +108,13 @@ async function fetchJson(path) {
 }
 
 function initializeControls() {
-  const modes = state.metadata?.modes?.length ? state.metadata.modes : unique(state.players.map((row) => row.game_mode));
+  const modes = state.metadata?.modes?.length ? state.metadata.modes : ["Large Team", "Small Team", "Duel", "FFA"];
   state.playerMode = modes[0] || "Large Team";
   state.nationMode = modes[0] || "Large Team";
-  state.teamMode = state.teams[0]?.game_mode || modes.find((mode) => mode.includes("Team")) || "Large Team";
+  state.teamMode = modes.find((mode) => mode.includes("Team")) || "Large Team";
+  state.playerPeriod = defaultPeriod();
+  state.nationPeriod = defaultPeriod();
+  state.teamPeriod = defaultPeriod();
 
   renderModeButtons(elements.playerModes, modes, state.playerMode, (mode) => {
     state.playerMode = mode;
@@ -121,18 +124,32 @@ function initializeControls() {
     state.nationMode = mode;
     renderNations();
   });
-  renderModeButtons(elements.teamModes, unique(state.teams.map((row) => row.game_mode)), state.teamMode, (mode) => {
+  renderModeButtons(elements.teamModes, modes.filter((mode) => mode.includes("Team")), state.teamMode, (mode) => {
     state.teamMode = mode;
     renderTeams();
   });
+  renderPeriodSelect(elements.playerPeriod, state.playerPeriod, async (period) => {
+    state.playerPeriod = period;
+    showLoading(elements.playerRows, 7);
+    await loadPeriodData(period);
+    renderPlayers();
+  });
+  renderPeriodSelect(elements.nationPeriod, state.nationPeriod, async (period) => {
+    state.nationPeriod = period;
+    showLoading(elements.nationRows, 7);
+    await loadPeriodData(period);
+    renderNations();
+  });
+  renderPeriodSelect(elements.teamPeriod, state.teamPeriod, async (period) => {
+    state.teamPeriod = period;
+    showLoading(elements.teamRows, 7);
+    await loadPeriodData(period);
+    renderTeams();
+  });
 
-  const playerCountries = unique(state.players.map((row) => row.country).filter(Boolean)).sort();
   elements.playerCountry.innerHTML = [
     `<option value="all">All countries</option>`,
-    ...playerCountries.map((code) => {
-      const country = state.countries.find((item) => item.code === code);
-      return `<option value="${escapeHtml(code)}">${escapeHtml(country?.name || code)}</option>`;
-    }),
+    ...state.countries.map((country) => `<option value="${escapeHtml(country.code)}">${escapeHtml(country.name)}</option>`),
   ].join("");
 
   elements.playerCountry.addEventListener("change", renderPlayers);
@@ -149,10 +166,12 @@ function initializeControls() {
 
 function renderSummary() {
   const range = state.metadata?.sourceDateRange || {};
+  const current = defaultPeriod();
+  const counts = state.metadata?.recordCountsByPeriod || {};
   elements.sourceRange.textContent = `${formatDate(range.from)} to ${formatDate(range.to)}`;
-  elements.statPlayers.textContent = formatNumber(state.players.length);
-  elements.statNations.textContent = formatNumber(state.nations.length);
-  elements.statTeams.textContent = formatNumber(state.teams.length);
+  elements.statPlayers.textContent = formatNumber(counts.players?.[current] || 0);
+  elements.statNations.textContent = formatNumber(counts.nations?.[current] || 0);
+  elements.statTeams.textContent = formatNumber(counts.teams?.[current] || 0);
   elements.statUpdated.textContent = formatDateTime(state.metadata?.generatedAt);
 }
 
@@ -179,10 +198,53 @@ function renderModeButtons(container, modes, activeMode, onSelect) {
   });
 }
 
+function renderPeriodSelect(select, activePeriod, onSelect) {
+  select.innerHTML = state.periods
+    .map((period) => {
+      const label = period.id === "current" ? `${period.label} (${period.description})` : period.label;
+      const selected = period.id === activePeriod ? " selected" : "";
+      return `<option value="${escapeHtml(period.id)}"${selected}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  select.addEventListener("change", () => onSelect(select.value));
+}
+
+async function loadPeriodData(period) {
+  const files = state.metadata?.files || {};
+  const tasks = [];
+  const playerFile = files.players?.[period];
+  const nationFile = files.nations?.[period];
+  const teamFile = files.teams?.[period];
+
+  if (!state.playersByPeriod[period] && playerFile) {
+    tasks.push(
+      fetchJson(`data/${playerFile}`).then((payload) => {
+        state.playersByPeriod[period] = payload.players || [];
+      })
+    );
+  }
+  if (!state.nationsByPeriod[period] && nationFile) {
+    tasks.push(
+      fetchJson(`data/${nationFile}`).then((payload) => {
+        state.nationsByPeriod[period] = payload.nations || [];
+      })
+    );
+  }
+  if (!state.teamsByPeriod[period] && teamFile) {
+    tasks.push(
+      fetchJson(`data/${teamFile}`).then((payload) => {
+        state.teamsByPeriod[period] = payload.teams || [];
+      })
+    );
+  }
+
+  await Promise.all(tasks);
+}
+
 function renderPlayers() {
   const country = elements.playerCountry.value;
   const query = elements.playerSearch.value.trim().toLowerCase();
-  let rows = state.players.filter((row) => row.game_mode === state.playerMode);
+  let rows = (state.playersByPeriod[state.playerPeriod] || []).filter((row) => row.game_mode === state.playerMode);
 
   if (country && country !== "all") {
     rows = rows.filter((row) => row.country === country).sort((a, b) => b.rating - a.rating);
@@ -195,7 +257,7 @@ function renderPlayers() {
   elements.playerRows.innerHTML = limited.length
     ? limited
         .map((row, index) => {
-          const rank = country === "all" ? row.rank : index + 1;
+          const rank = country === "all" ? row.rank : row.country_rank || index + 1;
           return `<tr>
             <td>${formatNumber(rank)}</td>
             <td class="name-cell">${escapeHtml(row.name)}</td>
@@ -212,7 +274,7 @@ function renderPlayers() {
 
 function renderNations() {
   const query = elements.nationSearch.value.trim().toLowerCase();
-  let rows = state.nations.filter((row) => row.game_mode === state.nationMode);
+  let rows = (state.nationsByPeriod[state.nationPeriod] || []).filter((row) => row.game_mode === state.nationMode);
   if (query) {
     rows = rows.filter((row) => `${row.country_name} ${row.country}`.toLowerCase().includes(query));
   }
@@ -235,7 +297,7 @@ function renderNations() {
 
 function renderTeams() {
   const query = elements.teamSearch.value.trim().toLowerCase();
-  let rows = state.teams.filter((row) => row.game_mode === state.teamMode);
+  let rows = (state.teamsByPeriod[state.teamPeriod] || []).filter((row) => row.game_mode === state.teamMode);
   if (query) {
     rows = rows.filter((row) => rosterText(row.roster).toLowerCase().includes(query));
   }
@@ -300,6 +362,10 @@ function emptyRow(columns) {
   return `<tr><td class="empty" colspan="${columns}">No records</td></tr>`;
 }
 
+function showLoading(container, columns) {
+  container.innerHTML = `<tr><td class="empty" colspan="${columns}">Loading...</td></tr>`;
+}
+
 function formatNumber(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return "-";
@@ -349,6 +415,10 @@ function formatDateTime(value) {
 
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function defaultPeriod() {
+  return state.periods.some((period) => period.id === "current") ? "current" : state.periods[0]?.id || "current";
 }
 
 function escapeHtml(value) {

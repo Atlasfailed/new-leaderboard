@@ -43,14 +43,53 @@ def _records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     return output
 
 
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
+def _write_json(path: Path, payload: dict[str, Any], compact: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    if compact:
+        path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    else:
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _clean_generated_rankings(output_dir: Path) -> None:
+    for pattern in ["player_rankings*.json", "nation_rankings*.json", "team_rankings*.json"]:
+        for path in output_dir.glob(pattern):
+            path.unlink()
+
+
+def _period_payload(frame: pd.DataFrame, period_id: str) -> pd.DataFrame:
+    period_frame = frame[frame["period"] == period_id].copy() if "period" in frame.columns else frame.copy()
+    return period_frame.drop(columns=["period", "period_label"], errors="ignore")
+
+
+def _write_period_files(
+    output_dir: Path,
+    base_name: str,
+    record_key: str,
+    periods: list[dict[str, Any]],
+    frame: pd.DataFrame,
+    generated_at: str,
+) -> tuple[dict[str, str], dict[str, int]]:
+    files: dict[str, str] = {}
+    counts: dict[str, int] = {}
+    for period in periods:
+        period_id = str(period["id"])
+        period_frame = _period_payload(frame, period_id)
+        filename = f"{base_name}_{period_id}.json"
+        files[period_id] = filename
+        counts[period_id] = int(len(period_frame))
+        _write_json(
+            output_dir / filename,
+            {"generatedAt": generated_at, "period": period_id, record_key: _records(period_frame)},
+            compact=True,
+        )
+    return files, counts
 
 
 def export_site_data(
     output_dir: Path,
     prepared: PreparedData,
+    periods: list[dict[str, Any]],
     players: pd.DataFrame,
     nations: pd.DataFrame,
     teams: pd.DataFrame,
@@ -63,6 +102,16 @@ def export_site_data(
         .rename(columns={"alpha-2": "code", "sub-region": "subRegion"})
         .sort_values("name")
     )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _clean_generated_rankings(output_dir)
+
+    player_files, player_counts = _write_period_files(
+        output_dir, "player_rankings", "players", periods, players, generated_at
+    )
+    nation_files, nation_counts = _write_period_files(
+        output_dir, "nation_rankings", "nations", periods, nations, generated_at
+    )
+    team_files, team_counts = _write_period_files(output_dir, "team_rankings", "teams", periods, teams, generated_at)
 
     metadata = {
         "schemaVersion": 1,
@@ -80,13 +129,20 @@ def export_site_data(
             "from": _json_value(prepared.matches["start_time"].min()),
             "to": _json_value(prepared.matches["start_time"].max()),
         },
+        "periods": _json_value(periods),
+        "files": {
+            "players": player_files,
+            "nations": nation_files,
+            "teams": team_files,
+        },
+        "recordCountsByPeriod": {
+            "players": player_counts,
+            "nations": nation_counts,
+            "teams": team_counts,
+        },
         "warnings": prepared.warnings,
     }
 
     _write_json(output_dir / "metadata.json", metadata)
     _write_json(output_dir / "countries.json", {"generatedAt": generated_at, "countries": _records(countries)})
-    _write_json(output_dir / "player_rankings.json", {"generatedAt": generated_at, "players": _records(players)})
-    _write_json(output_dir / "nation_rankings.json", {"generatedAt": generated_at, "nations": _records(nations)})
-    _write_json(output_dir / "team_rankings.json", {"generatedAt": generated_at, "teams": _records(teams)})
-    _write_json(output_dir / "efficiency_analysis.json", {"generatedAt": generated_at, "units": _records(efficiency)})
-
+    _write_json(output_dir / "efficiency_analysis.json", {"generatedAt": generated_at, "units": _records(efficiency)}, compact=True)
