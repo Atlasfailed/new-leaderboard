@@ -398,17 +398,6 @@ tbody tr:last-child td {
   margin: 6px 0;
 }
 
-.formula {
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #f8faf8;
-  color: #33413c;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.9rem;
-  overflow-x: auto;
-}
-
 @media (max-width: 900px) {
   .app-header {
     position: static;

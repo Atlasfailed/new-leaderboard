@@ -30,21 +30,20 @@ const helpContent = {
       {
         heading: "Who is included",
         items: [
-          "Only ranked games with a recognized game mode are used.",
-          "Current uses games from the last 30 days of the newest available match.",
-          "Year views use anyone who played at least one ranked game in that UTC calendar year.",
-          "Players are grouped by selected game mode. Country filtering changes the visible rank to the player's country rank.",
+          "Players appear if they played at least 1 ranked game in the selected mode and time period.",
+          "Current means games from the last 30 days. A year means games played during that year.",
+          "The mode buttons separate Large Team, Small Team, Duel, and FFA.",
+          "The country filter narrows the table and shows the player's rank within that country.",
         ],
       },
       {
-        heading: "How rank is calculated",
+        heading: "How ranking works",
         items: [
-          "For each player and mode, the latest rating row inside the selected period is used.",
-          "The displayed rating is skill minus uncertainty.",
-          "Players are ranked highest to lowest by that rating, with dense ranks for ties.",
-          "Win rate uses recorded winners when available; otherwise winners are inferred from rating changes.",
+          "Players are ranked by their latest rating in the selected mode and time period.",
+          "Higher rating means a higher rank.",
+          "The rating is slightly conservative for players whose rating is less certain.",
+          "Games and win rate are shown for context; they do not add a separate bonus to player rank.",
         ],
-        formula: "rating = latest new_skill - latest new_uncertainty",
       },
     ],
   },
@@ -54,22 +53,20 @@ const helpContent = {
       {
         heading: "Who is included",
         items: [
-          "Only players with a valid country code are included.",
-          "A player must have at least one ranked game in the selected period and mode.",
-          "A nation must have at least three included players to appear.",
-          "Current and year periods use the same inclusion rules as the player leaderboard.",
+          "A player counts for a nation if they have a country set and played at least 1 ranked game in the selected mode and time period.",
+          "A nation must have at least 3 included players to appear.",
+          "Current means the last 30 days. A year means games played during that year.",
         ],
       },
       {
         heading: "How score is calculated",
         items: [
-          "Each included player's rating is their latest skill minus uncertainty inside the selected period and mode.",
-          "Top 10 rating is the average rating of the country's ten highest rated included players, or fewer if the nation has fewer than ten.",
-          "Average rating uses all included players from that country.",
-          "The final score is confidence adjusted so very small countries are not over-weighted.",
-          "Total games is the sum of included player game counts, not unique national matches.",
+          "A nation's score is mostly based on its strongest players, with some credit for overall depth.",
+          "The strongest-player part uses up to the top 10 players from that nation.",
+          "The depth part looks at all included players from that nation.",
+          "Countries with fewer players get a small confidence penalty so one player cannot carry an entire country.",
+          "Top contributors are the players who most influence that nation's score.",
         ],
-        formula: "score = round(((top10_rating * 0.7 + avg_rating * 0.3) * 100) * min(1, log1p(player_count) / log1p(10)))",
       },
     ],
   },
@@ -79,22 +76,21 @@ const helpContent = {
       {
         heading: "Who is included",
         items: [
-          "Only ranked Large Team and Small Team games are used.",
-          "Teams are exact premade party rosters from match records, not replay-derived guesses.",
-          "Duo, Triple, and Quad rankings are split by exact roster size.",
-          "Minimum games: a roster must have at least 8 games in the selected period, mode, and size to appear.",
+          "Teams are premade groups who played together in ranked Large Team or Small Team games.",
+          "Duo, Triple, and Quad rankings are separate because roster size matters.",
+          "Minimum games: the same roster must have played together at least 8 times in the selected mode, time period, and size.",
+          "Current means the last 30 days. A year means games played during that year.",
         ],
       },
       {
         heading: "How score is calculated",
         items: [
-          "The roster's player rating is the average of each member's latest rating in that period and mode.",
-          "Games adds up appearances by the exact same roster.",
-          "The score combines roster strength with a smaller activity bonus.",
-          "Ranks are calculated separately for each game mode and roster size.",
-          "Win rate uses recorded winners when available; otherwise winners are inferred from rating changes.",
+          "The score is mostly based on the average rating of the players in that roster.",
+          "A roster gets a smaller bonus for playing more games together.",
+          "The same players must be in the roster for games to count toward that team.",
+          "Teams are ranked separately for each mode and roster size.",
+          "Win rate is shown for context, but the main score is rating plus activity.",
         ],
-        formula: "score = round(avg_player_rating * 100 + log1p(games) * 300)",
       },
     ],
   },
@@ -104,17 +100,17 @@ const helpContent = {
       {
         heading: "What is included",
         items: [
-          "This view uses the static unit efficiency reference file, not player match data.",
-          "Rows are filtered by selected faction and wind or tidal speed.",
-          "The selected metric controls the sort order.",
+          "This view compares energy generators, not player results.",
+          "Pick a faction and wind or tidal speed to see the matching generators.",
+          "Pick Metal or Time to choose what kind of efficiency matters most.",
         ],
       },
       {
         heading: "How rank is calculated",
         items: [
-          "Metal ranking sorts by metal efficiency from highest to lowest.",
-          "Time ranking sorts by time efficiency from highest to lowest.",
-          "Output, metal cost, and build time are shown so the ranking can be checked against raw values.",
+          "Metal ranks generators by energy output for the metal spent.",
+          "Time ranks generators by energy output for the build time spent.",
+          "Higher efficiency appears higher in the table.",
         ],
       },
     ],
@@ -312,7 +308,6 @@ function openHelp(key) {
       (section) => `<section class="help-section">
         <h3>${escapeHtml(section.heading)}</h3>
         <ul>${section.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-        ${section.formula ? `<div class="formula">${escapeHtml(section.formula)}</div>` : ""}
       </section>`
     )
     .join("");
