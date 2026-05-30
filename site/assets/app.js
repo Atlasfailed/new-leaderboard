@@ -85,11 +85,11 @@ const helpContent = {
       {
         heading: "How score is calculated",
         items: [
-          "The score is mostly based on the average rating of the players in that roster.",
-          "A roster gets a smaller bonus for playing more games together.",
+          "The score combines three things: the players' rating, the difficulty of their opponents, and win rate.",
+          "Difficulty means the average rating of the opponents that roster faced.",
+          "Beating stronger opponents and keeping a higher win rate both help the team rank higher.",
           "The same players must be in the roster for games to count toward that team.",
           "Teams are ranked separately for each mode and roster size.",
-          "Win rate is shown for context, but the main score is rating plus activity.",
         ],
       },
     ],
@@ -261,7 +261,7 @@ function initializeControls() {
   });
   renderPeriodSelect(elements.teamPeriod, state.teamPeriod, async (period) => {
     state.teamPeriod = period;
-    showLoading(elements.teamRows, 9);
+    showLoading(elements.teamRows, 10);
     await loadPeriodData(period);
     renderTeams();
   });
@@ -470,11 +470,12 @@ function renderTeams() {
           <td>${formatNumber(row.score)}</td>
           <td>${formatNumber(row.games)}</td>
           <td>${formatPercent(row.win_rate)}</td>
+          <td>${formatDecimal(row.avg_opponent_rating, 2)}</td>
           <td>${formatDecimal(row.avg_rating, 2)}</td>
           <td>${escapeHtml(row.top_map || "-")}</td>
         </tr>`)
         .join("")
-    : emptyRow(9);
+    : emptyRow(10);
 }
 
 function renderEfficiency() {

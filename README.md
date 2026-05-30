@@ -55,7 +55,7 @@ The workflow runs at 10:35 UTC every Tuesday and Saturday, on every push to `mai
 
 The generated JSON files are intentionally ignored by Git; Actions regenerates them before every deployment.
 
-The pipeline uses the BAR datamarts only. Nation and team rankings are rating/activity based so they do not depend on replay JSON or winner fields.
+The pipeline uses the BAR datamarts only. Nation rankings are rating/depth based, and team rankings are based on roster rating, opponent difficulty, and win rate.
 
 Ranking pages default to `Current`, which is generated from players with games in the last 30 days of the newest datamart timestamp. Year options are generated from UTC calendar years and include players who played during that year.
 
