@@ -30,8 +30,8 @@ const helpContent = {
       {
         heading: "Who is included",
         items: [
-          "Only ranked datamart games with a recognized game mode are used.",
-          "Current uses games from the last 30 days of the newest datamart timestamp.",
+          "Only ranked games with a recognized game mode are used.",
+          "Current uses games from the last 30 days of the newest available match.",
           "Year views use anyone who played at least one ranked game in that UTC calendar year.",
           "Players are grouped by selected game mode. Country filtering changes the visible rank to the player's country rank.",
         ],
@@ -42,7 +42,7 @@ const helpContent = {
           "For each player and mode, the latest rating row inside the selected period is used.",
           "The displayed rating is skill minus uncertainty.",
           "Players are ranked highest to lowest by that rating, with dense ranks for ties.",
-          "Win rate uses the datamart winning team when available; the pipeline infers winners from rating changes when needed.",
+          "Win rate uses recorded winners when available; otherwise winners are inferred from rating changes.",
         ],
         formula: "rating = latest new_skill - latest new_uncertainty",
       },
@@ -79,10 +79,10 @@ const helpContent = {
       {
         heading: "Who is included",
         items: [
-          "Only Large Team and Small Team ranked datamart games are used.",
-          "Teams are exact datamart party rosters from party_id, not replay-derived guesses.",
+          "Only ranked Large Team and Small Team games are used.",
+          "Teams are exact premade party rosters from match records, not replay-derived guesses.",
           "Duo, Triple, and Quad rankings are split by exact roster size.",
-          "A roster must have at least eight games in the selected period, mode, and size to appear.",
+          "Minimum games: a roster must have at least 8 games in the selected period, mode, and size to appear.",
         ],
       },
       {
@@ -92,7 +92,7 @@ const helpContent = {
           "Games adds up appearances by the exact same roster.",
           "The score combines roster strength with a smaller activity bonus.",
           "Ranks are calculated separately for each game mode and roster size.",
-          "Win rate uses the datamart winning team or the pipeline's rating-delta inference when needed.",
+          "Win rate uses recorded winners when available; otherwise winners are inferred from rating changes.",
         ],
         formula: "score = round(avg_player_rating * 100 + log1p(games) * 300)",
       },
