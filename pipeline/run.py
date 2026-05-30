@@ -23,6 +23,14 @@ from .rankings import (
 )
 
 
+def _completed_year(period: dict, active_year: int) -> bool:
+    return period.get("type") == "year" and int(period["year"]) < active_year
+
+
+def _completed_archive_exists(output_dir: Path, period: dict) -> bool:
+    return (output_dir / "completed" / f"completed_{period['id']}.json").exists()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build static BAR leaderboard data.")
     parser.add_argument("--source-dir", type=Path, help="Directory containing matches/match_players/players parquet files.")
@@ -33,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-nation-player-games", type=int, default=DEFAULT_MIN_NATION_PLAYER_GAMES)
     parser.add_argument("--min-team-games", type=int, default=DEFAULT_MIN_TEAM_GAMES)
     parser.add_argument("--current-window-days", type=int, default=DEFAULT_CURRENT_WINDOW_DAYS)
+    parser.add_argument("--rebuild-completed-years", action="store_true")
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
@@ -44,19 +53,37 @@ def main() -> None:
     raw = load_sources(source_dir=args.source_dir, cache_dir=args.cache_dir, refresh=args.refresh)
     prepared = prepare_data(raw)
     periods = build_periods(prepared, current_window_days=args.current_window_days)
+    active_year = int(prepared.matches["start_time"].max().year)
+    ranking_periods = [
+        period
+        for period in periods
+        if args.rebuild_completed_years
+        or not _completed_year(period, active_year)
+        or not _completed_archive_exists(args.output, period)
+    ]
 
-    players = build_player_rankings(prepared, periods=periods, min_games=args.min_player_games)
-    nations = build_nation_rankings(prepared, periods=periods, min_player_games=args.min_nation_player_games)
+    players = build_player_rankings(prepared, periods=ranking_periods, min_games=args.min_player_games)
+    nations = build_nation_rankings(prepared, periods=ranking_periods, min_player_games=args.min_nation_player_games)
     teams = build_team_rankings(
         prepared,
-        periods=periods,
+        periods=ranking_periods,
         min_games=args.min_team_games,
     )
     efficiency = build_efficiency_analysis()
 
-    export_site_data(args.output, prepared, periods, players, nations, teams, efficiency)
+    export_site_data(
+        args.output,
+        prepared,
+        periods,
+        players,
+        nations,
+        teams,
+        efficiency,
+        rebuild_completed_years=args.rebuild_completed_years,
+    )
 
     print(f"Wrote data to {args.output}")
+    print(f"Ranking periods built: {', '.join(str(period['id']) for period in ranking_periods)}")
     print(f"Player records: {len(players):,}")
     print(f"Nation records: {len(nations):,}")
     print(f"Team records: {len(teams):,}")

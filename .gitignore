@@ -7,4 +7,5 @@ __pycache__/
 node_modules/
 site/data/*.json
 !site/data/.gitkeep
-
+!site/data/completed/
+!site/data/completed/*.json

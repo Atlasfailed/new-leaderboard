@@ -211,6 +211,15 @@ function renderPeriodSelect(select, activePeriod, onSelect) {
 
 async function loadPeriodData(period) {
   const files = state.metadata?.files || {};
+  const completedFile = files.completed?.[period];
+  if (completedFile && (!state.playersByPeriod[period] || !state.nationsByPeriod[period] || !state.teamsByPeriod[period])) {
+    const payload = await fetchJson(`data/${completedFile}`);
+    state.playersByPeriod[period] = payload.players || [];
+    state.nationsByPeriod[period] = payload.nations || [];
+    state.teamsByPeriod[period] = payload.teams || [];
+    return;
+  }
+
   const tasks = [];
   const playerFile = files.players?.[period];
   const nationFile = files.nations?.[period];
