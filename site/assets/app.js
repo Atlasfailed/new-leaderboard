@@ -54,9 +54,6 @@ async function init() {
 function bindElements() {
   [
     "sourceRange",
-    "statPlayers",
-    "statNations",
-    "statTeams",
     "statUpdated",
     "appError",
     "playerModes",
@@ -170,12 +167,7 @@ function initializeControls() {
 
 function renderSummary() {
   const range = state.metadata?.sourceDateRange || {};
-  const current = defaultPeriod();
-  const counts = state.metadata?.recordCountsByPeriod || {};
   elements.sourceRange.textContent = `${formatDate(range.from)} to ${formatDate(range.to)}`;
-  elements.statPlayers.textContent = formatNumber(counts.players?.[current] || 0);
-  elements.statNations.textContent = formatNumber(counts.nations?.[current] || 0);
-  elements.statTeams.textContent = formatNumber(counts.teams?.[current] || 0);
   elements.statUpdated.textContent = formatDateTime(state.metadata?.generatedAt);
 }
 
