@@ -11,6 +11,9 @@ import pandas as pd
 from .clean import PreparedData
 from .config import DATAMART_URLS, GAME_MODES
 
+MAX_JSON_FILE_BYTES = 20_000_000
+MAX_RECORDS_PER_JSON_FILE = 15_000
+
 
 def _json_value(value: Any) -> Any:
     if value is None:
@@ -57,6 +60,19 @@ def _clean_generated_rankings(output_dir: Path) -> None:
             path.unlink()
 
 
+def _clean_completed_period_files(output_dir: Path, period_id: str) -> None:
+    completed_dir = output_dir / "completed"
+    if not completed_dir.exists():
+        return
+    for pattern in [
+        f"completed_{period_id}_players*.json",
+        f"completed_{period_id}_nations*.json",
+        f"completed_{period_id}_teams*.json",
+    ]:
+        for path in completed_dir.glob(pattern):
+            path.unlink()
+
+
 def _period_payload(frame: pd.DataFrame, period_id: str) -> pd.DataFrame:
     period_frame = frame[frame["period"] == period_id].copy() if "period" in frame.columns else frame.copy()
     return period_frame.drop(columns=["period", "period_label"], errors="ignore")
@@ -75,6 +91,12 @@ def _archive_counts(path: Path) -> dict[str, int]:
         return {"players": 0, "nations": 0, "teams": 0}
 
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if "counts" in payload:
+        return {
+            "players": int(payload["counts"].get("players", 0)),
+            "nations": int(payload["counts"].get("nations", 0)),
+            "teams": int(payload["counts"].get("teams", 0)),
+        }
     return {
         "players": len(payload.get("players", [])),
         "nations": len(payload.get("nations", [])),
@@ -98,14 +120,49 @@ def _write_category_file(
     period_id: str,
     frame: pd.DataFrame,
     generated_at: str,
-) -> int:
+) -> tuple[int, str | list[str]]:
     period_frame = _period_payload(frame, period_id)
-    _write_json(
-        output_dir / filename,
-        {"generatedAt": generated_at, "period": period_id, record_key: _records(period_frame)},
-        compact=True,
-    )
-    return int(len(period_frame))
+    records = _records(period_frame)
+    file_ref = _write_record_files(output_dir, filename, record_key, records, generated_at, period_id)
+    return int(len(period_frame)), file_ref
+
+
+def _compact_size(payload: dict[str, Any]) -> int:
+    return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+
+def _chunk_filename(filename: str, index: int) -> str:
+    stem = filename.removesuffix(".json")
+    return f"{stem}_{index:03d}.json"
+
+
+def _write_record_files(
+    output_dir: Path,
+    filename: str,
+    record_key: str,
+    records: list[dict[str, Any]],
+    generated_at: str,
+    period_id: str,
+) -> str | list[str]:
+    payload = {"generatedAt": generated_at, "period": period_id, record_key: records}
+    if len(records) <= MAX_RECORDS_PER_JSON_FILE and _compact_size(payload) <= MAX_JSON_FILE_BYTES:
+        _write_json(output_dir / filename, payload, compact=True)
+        return filename
+
+    refs = []
+    for index, start in enumerate(range(0, len(records), MAX_RECORDS_PER_JSON_FILE), start=1):
+        chunk = records[start : start + MAX_RECORDS_PER_JSON_FILE]
+        chunk_filename = _chunk_filename(filename, index)
+        chunk_payload = {
+            "generatedAt": generated_at,
+            "period": period_id,
+            "chunk": index,
+            "records": len(records),
+            record_key: chunk,
+        }
+        _write_json(output_dir / chunk_filename, chunk_payload, compact=True)
+        refs.append(chunk_filename)
+    return refs
 
 
 def _write_completed_archive(
@@ -121,16 +178,48 @@ def _write_completed_archive(
     if path.exists() and not rebuild_completed_years:
         return _archive_counts(path)
 
+    _clean_completed_period_files(output_dir, period_id)
     player_frame = _period_payload(players, period_id)
     nation_frame = _period_payload(nations, period_id)
     team_frame = _period_payload(teams, period_id)
+    player_ref = _write_record_files(
+        output_dir,
+        f"completed/completed_{period_id}_players.json",
+        "players",
+        _records(player_frame),
+        generated_at,
+        period_id,
+    )
+    nation_ref = _write_record_files(
+        output_dir,
+        f"completed/completed_{period_id}_nations.json",
+        "nations",
+        _records(nation_frame),
+        generated_at,
+        period_id,
+    )
+    team_ref = _write_record_files(
+        output_dir,
+        f"completed/completed_{period_id}_teams.json",
+        "teams",
+        _records(team_frame),
+        generated_at,
+        period_id,
+    )
     payload = {
         "generatedAt": generated_at,
         "period": period_id,
         "completed": True,
-        "players": _records(player_frame),
-        "nations": _records(nation_frame),
-        "teams": _records(team_frame),
+        "files": {
+            "players": player_ref,
+            "nations": nation_ref,
+            "teams": team_ref,
+        },
+        "counts": {
+            "players": int(len(player_frame)),
+            "nations": int(len(nation_frame)),
+            "teams": int(len(team_frame)),
+        },
     }
     _write_json(path, payload, compact=True)
     return {
@@ -197,12 +286,15 @@ def export_site_data(
         player_filename = f"player_rankings_{period_id}.json"
         nation_filename = f"nation_rankings_{period_id}.json"
         team_filename = f"team_rankings_{period_id}.json"
-        player_files[period_id] = player_filename
-        nation_files[period_id] = nation_filename
-        team_files[period_id] = team_filename
-        player_counts[period_id] = _write_category_file(output_dir, player_filename, "players", period_id, players, generated_at)
-        nation_counts[period_id] = _write_category_file(output_dir, nation_filename, "nations", period_id, nations, generated_at)
-        team_counts[period_id] = _write_category_file(output_dir, team_filename, "teams", period_id, teams, generated_at)
+        player_counts[period_id], player_files[period_id] = _write_category_file(
+            output_dir, player_filename, "players", period_id, players, generated_at
+        )
+        nation_counts[period_id], nation_files[period_id] = _write_category_file(
+            output_dir, nation_filename, "nations", period_id, nations, generated_at
+        )
+        team_counts[period_id], team_files[period_id] = _write_category_file(
+            output_dir, team_filename, "teams", period_id, teams, generated_at
+        )
 
     metadata = {
         "schemaVersion": 1,

@@ -362,9 +362,20 @@ async function loadPeriodData(period) {
   const completedFile = files.completed?.[period];
   if (completedFile && (!state.playersByPeriod[period] || !state.nationsByPeriod[period] || !state.teamsByPeriod[period])) {
     const payload = await fetchJson(`data/${completedFile}`);
-    state.playersByPeriod[period] = payload.players || [];
-    state.nationsByPeriod[period] = payload.nations || [];
-    state.teamsByPeriod[period] = payload.teams || [];
+    if (payload.files) {
+      const [players, nations, teams] = await Promise.all([
+        loadRecordFiles(payload.files.players, "players"),
+        loadRecordFiles(payload.files.nations, "nations"),
+        loadRecordFiles(payload.files.teams, "teams"),
+      ]);
+      state.playersByPeriod[period] = players;
+      state.nationsByPeriod[period] = nations;
+      state.teamsByPeriod[period] = teams;
+    } else {
+      state.playersByPeriod[period] = payload.players || [];
+      state.nationsByPeriod[period] = payload.nations || [];
+      state.teamsByPeriod[period] = payload.teams || [];
+    }
     return;
   }
 
@@ -375,27 +386,36 @@ async function loadPeriodData(period) {
 
   if (!state.playersByPeriod[period] && playerFile) {
     tasks.push(
-      fetchJson(`data/${playerFile}`).then((payload) => {
-        state.playersByPeriod[period] = payload.players || [];
+      loadRecordFiles(playerFile, "players").then((records) => {
+        state.playersByPeriod[period] = records;
       })
     );
   }
   if (!state.nationsByPeriod[period] && nationFile) {
     tasks.push(
-      fetchJson(`data/${nationFile}`).then((payload) => {
-        state.nationsByPeriod[period] = payload.nations || [];
+      loadRecordFiles(nationFile, "nations").then((records) => {
+        state.nationsByPeriod[period] = records;
       })
     );
   }
   if (!state.teamsByPeriod[period] && teamFile) {
     tasks.push(
-      fetchJson(`data/${teamFile}`).then((payload) => {
-        state.teamsByPeriod[period] = payload.teams || [];
+      loadRecordFiles(teamFile, "teams").then((records) => {
+        state.teamsByPeriod[period] = records;
       })
     );
   }
 
   await Promise.all(tasks);
+}
+
+async function loadRecordFiles(fileRef, recordKey) {
+  if (!fileRef) {
+    return [];
+  }
+  const refs = Array.isArray(fileRef) ? fileRef : [fileRef];
+  const payloads = await Promise.all(refs.map((ref) => fetchJson(`data/${ref}`)));
+  return payloads.flatMap((payload) => payload[recordKey] || []);
 }
 
 function renderPlayers() {
