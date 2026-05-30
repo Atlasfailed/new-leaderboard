@@ -82,6 +82,15 @@ def _archive_counts(path: Path) -> dict[str, int]:
     }
 
 
+def team_roster_size_options(sizes: list[int]) -> list[dict[str, Any]]:
+    labels = {
+        2: "Duo",
+        3: "Triple",
+        4: "Quad",
+    }
+    return [{"size": int(size), "label": labels.get(int(size), f"{int(size)}-stack")} for size in sorted(set(sizes))]
+
+
 def _write_category_file(
     output_dir: Path,
     filename: str,
@@ -139,6 +148,7 @@ def export_site_data(
     nations: pd.DataFrame,
     teams: pd.DataFrame,
     efficiency: pd.DataFrame,
+    team_roster_sizes: list[int] | None = None,
     rebuild_completed_years: bool = False,
 ) -> None:
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -152,6 +162,11 @@ def export_site_data(
     _clean_generated_rankings(output_dir)
 
     active_year = int(prepared.matches["start_time"].max().year)
+    if team_roster_sizes is None:
+        if "roster_size" in teams.columns and not teams.empty:
+            team_roster_sizes = sorted(teams["roster_size"].dropna().astype(int).unique().tolist())
+        else:
+            team_roster_sizes = [2]
     player_files: dict[str, str] = {}
     nation_files: dict[str, str] = {}
     team_files: dict[str, str] = {}
@@ -206,6 +221,7 @@ def export_site_data(
             "to": _json_value(prepared.matches["start_time"].max()),
         },
         "periods": _json_value(periods),
+        "teamRosterSizes": team_roster_size_options(team_roster_sizes),
         "files": {
             "players": player_files,
             "nations": nation_files,

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from itertools import combinations
-
 import numpy as np
 import pandas as pd
 
@@ -11,6 +9,7 @@ from .config import (
     DEFAULT_MIN_NATION_PLAYER_GAMES,
     DEFAULT_MIN_PLAYER_GAMES,
     DEFAULT_MIN_TEAM_GAMES,
+    DEFAULT_TEAM_ROSTER_SIZES,
     ENERGY_EFFICIENCY_PATH,
     TEAM_MODES,
 )
@@ -19,6 +18,15 @@ from .clean import PreparedData
 
 def _rank_within_group(frame: pd.DataFrame, group_cols: list[str], score_col: str, rank_col: str) -> pd.Series:
     return frame.groupby(group_cols)[score_col].rank(method="dense", ascending=False).astype(int).rename(rank_col)
+
+
+def team_size_label(size: int) -> str:
+    labels = {
+        2: "Duo",
+        3: "Triple",
+        4: "Quad",
+    }
+    return labels.get(size, f"{size}-stack")
 
 
 def build_periods(prepared: PreparedData, current_window_days: int = DEFAULT_CURRENT_WINDOW_DAYS) -> list[dict[str, object]]:
@@ -269,6 +277,7 @@ def _build_team_rankings_for_data(
     data: pd.DataFrame,
     player_lookup: dict[int, dict[str, object]],
     min_games: int,
+    roster_sizes: list[int],
     top_per_mode: int,
 ) -> pd.DataFrame:
     latest_ratings = (
@@ -282,42 +291,63 @@ def _build_team_rankings_for_data(
         for row in latest_ratings.itertuples(index=False)
     }
 
-    stats: dict[tuple[str, int, int], dict[str, object]] = defaultdict(
+    stats: dict[tuple[str, int, tuple[int, ...]], dict[str, object]] = defaultdict(
         lambda: {
             "games": 0,
+            "decided_games": 0,
+            "wins": 0,
             "last_played": pd.Timestamp.min.tz_localize("UTC"),
             "maps": defaultdict(int),
         }
     )
 
-    grouped = data[["match_id", "team_id", "game_mode", "start_time", "map", "user_id"]].drop_duplicates()
-    for (_match_id, _team_id, mode), team in grouped.groupby(["match_id", "team_id", "game_mode"], sort=False):
+    party_rows = data.dropna(subset=["party_id"]).copy()
+    party_rows["party_id"] = party_rows["party_id"].astype(str).str.strip()
+    party_rows = party_rows[party_rows["party_id"] != ""]
+    if party_rows.empty:
+        return pd.DataFrame()
+
+    grouped = party_rows[
+        ["match_id", "team_id", "party_id", "game_mode", "start_time", "map", "user_id", "won"]
+    ].drop_duplicates()
+    for (_match_id, _team_id, _party_id, mode), team in grouped.groupby(
+        ["match_id", "team_id", "party_id", "game_mode"], sort=False
+    ):
         players = sorted(set(int(value) for value in team["user_id"].dropna()))
-        if len(players) < 2 or len(players) > 16:
+        roster_size = len(players)
+        if roster_size not in roster_sizes:
             continue
 
         last_played = team["start_time"].max()
         map_name = str(team["map"].iloc[0] or "")
-        for left, right in combinations(players, 2):
-            key = (str(mode), left, right)
-            item = stats[key]
-            item["games"] += 1
-            if last_played > item["last_played"]:
-                item["last_played"] = last_played
-            if map_name:
-                item["maps"][map_name] += 1
+        roster_ids = tuple(players)
+        key = (str(mode), roster_size, roster_ids)
+        item = stats[key]
+        item["games"] += 1
+        won_values = team["won"].dropna()
+        if not won_values.empty:
+            item["decided_games"] += 1
+            item["wins"] += int(float(won_values.iloc[0]) > 0)
+        if last_played > item["last_played"]:
+            item["last_played"] = last_played
+        if map_name:
+            item["maps"][map_name] += 1
 
     records: list[dict[str, object]] = []
-    for (mode, left, right), item in stats.items():
+    for (mode, roster_size, roster_ids), item in stats.items():
         games = int(item["games"])
         if games < min_games:
             continue
-        player_ratings = [rating_lookup.get((mode, left)), rating_lookup.get((mode, right))]
+        decided_games = int(item["decided_games"])
+        wins = int(item["wins"])
+        losses = decided_games - wins
+        win_rate = wins / decided_games if decided_games else np.nan
+        player_ratings = [rating_lookup.get((mode, user_id)) for user_id in roster_ids]
         known_ratings = [rating for rating in player_ratings if rating is not None]
         avg_rating = float(np.mean(known_ratings)) if known_ratings else 0.0
         score = round(avg_rating * 100 + np.log1p(games) * 300)
         roster = []
-        for user_id in [left, right]:
+        for user_id in roster_ids:
             player = player_lookup.get(user_id, {})
             roster.append(
                 {
@@ -331,11 +361,13 @@ def _build_team_rankings_for_data(
         records.append(
             {
                 "game_mode": mode,
+                "roster_size": roster_size,
+                "roster_label": team_size_label(roster_size),
                 "roster": roster,
                 "games": games,
-                "wins": np.nan,
-                "losses": np.nan,
-                "win_rate": np.nan,
+                "wins": wins if decided_games else np.nan,
+                "losses": losses if decided_games else np.nan,
+                "win_rate": win_rate,
                 "avg_rating": round(avg_rating, 2),
                 "score": score,
                 "last_played": item["last_played"],
@@ -347,12 +379,18 @@ def _build_team_rankings_for_data(
         return pd.DataFrame()
 
     ranking = pd.DataFrame(records)
-    ranking = ranking.sort_values(["game_mode", "score", "games"], ascending=[True, False, False])
-    ranking["rank"] = _rank_within_group(ranking, ["game_mode"], "score", "rank")
-    ranking = ranking.sort_values(["game_mode", "rank"]).groupby("game_mode", as_index=False).head(top_per_mode)
+    ranking = ranking.sort_values(["game_mode", "roster_size", "score", "games"], ascending=[True, True, False, False])
+    ranking["rank"] = _rank_within_group(ranking, ["game_mode", "roster_size"], "score", "rank")
+    ranking = (
+        ranking.sort_values(["game_mode", "roster_size", "rank"])
+        .groupby(["game_mode", "roster_size"], as_index=False)
+        .head(top_per_mode)
+    )
     return ranking[
         [
             "game_mode",
+            "roster_size",
+            "roster_label",
             "rank",
             "roster",
             "games",
@@ -371,19 +409,21 @@ def build_team_rankings(
     prepared: PreparedData,
     periods: list[dict[str, object]],
     min_games: int = DEFAULT_MIN_TEAM_GAMES,
+    roster_sizes: list[int] | None = None,
     top_per_mode: int = 500,
 ) -> pd.DataFrame:
     data = prepared.ranked[prepared.ranked["game_mode"].isin(TEAM_MODES)].copy()
     if data.empty:
         return pd.DataFrame()
 
+    roster_sizes = sorted(set(roster_sizes or DEFAULT_TEAM_ROSTER_SIZES))
     player_lookup = prepared.players.set_index("user_id").to_dict("index")
     rankings = []
     for period in periods:
         period_rows = _period_data(data, period)
         if period_rows.empty:
             continue
-        ranking = _build_team_rankings_for_data(period_rows, player_lookup, min_games, top_per_mode)
+        ranking = _build_team_rankings_for_data(period_rows, player_lookup, min_games, roster_sizes, top_per_mode)
         if not ranking.empty:
             rankings.append(_with_period(ranking, period))
 

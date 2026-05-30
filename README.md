@@ -61,3 +61,4 @@ Ranking pages default to `Current`, which is generated from players with games i
 
 Finished years are archived as completed JSON files and are not rebuilt by default. Use `--rebuild-completed-years` only when intentionally regenerating historical archives.
 When a new calendar year starts, run the pipeline once and commit the newly created `completed/completed_<previous-year>.json` archive.
+Team rankings use exact datamart party rosters and are generated separately by roster size. The default sizes are Duo, Triple, and Quad; pass `--team-roster-sizes 2,3,4,5` to build additional sizes.

@@ -9,6 +9,7 @@ const state = {
   playerMode: null,
   nationMode: null,
   teamMode: null,
+  teamSize: 2,
   playerPeriod: "current",
   nationPeriod: "current",
   teamPeriod: "current",
@@ -64,6 +65,7 @@ function bindElements() {
     "playerPeriod",
     "nationPeriod",
     "teamPeriod",
+    "teamSize",
     "playerCountry",
     "playerSearch",
     "nationSearch",
@@ -112,6 +114,7 @@ function initializeControls() {
   state.playerMode = modes[0] || "Large Team";
   state.nationMode = modes[0] || "Large Team";
   state.teamMode = modes.find((mode) => mode.includes("Team")) || "Large Team";
+  state.teamSize = defaultTeamSize();
   state.playerPeriod = defaultPeriod();
   state.nationPeriod = defaultPeriod();
   state.teamPeriod = defaultPeriod();
@@ -142,10 +145,11 @@ function initializeControls() {
   });
   renderPeriodSelect(elements.teamPeriod, state.teamPeriod, async (period) => {
     state.teamPeriod = period;
-    showLoading(elements.teamRows, 7);
+    showLoading(elements.teamRows, 9);
     await loadPeriodData(period);
     renderTeams();
   });
+  renderTeamSizeSelect();
 
   elements.playerCountry.innerHTML = [
     `<option value="all">All countries</option>`,
@@ -207,6 +211,20 @@ function renderPeriodSelect(select, activePeriod, onSelect) {
     })
     .join("");
   select.addEventListener("change", () => onSelect(select.value));
+}
+
+function renderTeamSizeSelect() {
+  const options = state.metadata?.teamRosterSizes || [{ size: 2, label: "Duo" }];
+  elements.teamSize.innerHTML = options
+    .map((option) => {
+      const selected = Number(option.size) === Number(state.teamSize) ? " selected" : "";
+      return `<option value="${escapeHtml(option.size)}"${selected}>${escapeHtml(option.label)}</option>`;
+    })
+    .join("");
+  elements.teamSize.addEventListener("change", () => {
+    state.teamSize = Number(elements.teamSize.value);
+    renderTeams();
+  });
 }
 
 async function loadPeriodData(period) {
@@ -306,7 +324,9 @@ function renderNations() {
 
 function renderTeams() {
   const query = elements.teamSearch.value.trim().toLowerCase();
-  let rows = (state.teamsByPeriod[state.teamPeriod] || []).filter((row) => row.game_mode === state.teamMode);
+  let rows = (state.teamsByPeriod[state.teamPeriod] || []).filter(
+    (row) => row.game_mode === state.teamMode && Number(row.roster_size) === Number(state.teamSize)
+  );
   if (query) {
     rows = rows.filter((row) => rosterText(row.roster).toLowerCase().includes(query));
   }
@@ -317,14 +337,16 @@ function renderTeams() {
         .map((row) => `<tr>
           <td>${formatNumber(row.rank)}</td>
           <td class="name-cell">${formatRoster(row.roster)}</td>
+          <td>${escapeHtml(row.roster_label || `${row.roster_size}-stack`)}</td>
           <td>${escapeHtml(row.game_mode)}</td>
           <td>${formatNumber(row.score)}</td>
           <td>${formatNumber(row.games)}</td>
+          <td>${formatPercent(row.win_rate)}</td>
           <td>${formatDecimal(row.avg_rating, 2)}</td>
           <td>${escapeHtml(row.top_map || "-")}</td>
         </tr>`)
         .join("")
-    : emptyRow(7);
+    : emptyRow(9);
 }
 
 function renderEfficiency() {
@@ -428,6 +450,10 @@ function unique(values) {
 
 function defaultPeriod() {
   return state.periods.some((period) => period.id === "current") ? "current" : state.periods[0]?.id || "current";
+}
+
+function defaultTeamSize() {
+  return Number(state.metadata?.teamRosterSizes?.[0]?.size || 2);
 }
 
 function escapeHtml(value) {

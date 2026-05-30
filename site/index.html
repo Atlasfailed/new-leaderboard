@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BAR Leaderboard</title>
+    <link rel="icon" href="assets/logo.png">
     <link rel="stylesheet" href="assets/styles.css">
   </head>
   <body>
@@ -128,6 +129,10 @@
             <select id="teamPeriod"></select>
           </label>
           <label>
+            <span>Size</span>
+            <select id="teamSize"></select>
+          </label>
+          <label>
             <span>Search</span>
             <input id="teamSearch" type="search" autocomplete="off">
           </label>
@@ -137,10 +142,12 @@
             <thead>
               <tr>
                 <th>Rank</th>
-                <th>Core</th>
+                <th>Roster</th>
+                <th>Size</th>
                 <th>Mode</th>
                 <th>Score</th>
                 <th>Games</th>
+                <th>Win%</th>
                 <th>Avg Rating</th>
                 <th>Top Map</th>
               </tr>

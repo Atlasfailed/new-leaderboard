@@ -10,6 +10,7 @@ from .config import (
     DEFAULT_MIN_NATION_PLAYER_GAMES,
     DEFAULT_MIN_PLAYER_GAMES,
     DEFAULT_MIN_TEAM_GAMES,
+    DEFAULT_TEAM_ROSTER_SIZES,
     PROJECT_ROOT,
 )
 from .export import export_site_data
@@ -31,6 +32,19 @@ def _completed_archive_exists(output_dir: Path, period: dict) -> bool:
     return (output_dir / "completed" / f"completed_{period['id']}.json").exists()
 
 
+def _parse_roster_sizes(raw: str) -> list[int]:
+    sizes = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        size = int(item)
+        if size < 2:
+            raise argparse.ArgumentTypeError("team roster sizes must be 2 or greater")
+        sizes.append(size)
+    return sorted(set(sizes))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build static BAR leaderboard data.")
     parser.add_argument("--source-dir", type=Path, help="Directory containing matches/match_players/players parquet files.")
@@ -40,6 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-player-games", type=int, default=DEFAULT_MIN_PLAYER_GAMES)
     parser.add_argument("--min-nation-player-games", type=int, default=DEFAULT_MIN_NATION_PLAYER_GAMES)
     parser.add_argument("--min-team-games", type=int, default=DEFAULT_MIN_TEAM_GAMES)
+    parser.add_argument("--team-roster-sizes", type=_parse_roster_sizes, default=DEFAULT_TEAM_ROSTER_SIZES)
     parser.add_argument("--current-window-days", type=int, default=DEFAULT_CURRENT_WINDOW_DAYS)
     parser.add_argument("--rebuild-completed-years", action="store_true")
     parser.add_argument("--log-level", default="INFO")
@@ -68,6 +83,7 @@ def main() -> None:
         prepared,
         periods=ranking_periods,
         min_games=args.min_team_games,
+        roster_sizes=args.team_roster_sizes,
     )
     efficiency = build_efficiency_analysis()
 
@@ -79,6 +95,7 @@ def main() -> None:
         nations,
         teams,
         efficiency,
+        team_roster_sizes=args.team_roster_sizes,
         rebuild_completed_years=args.rebuild_completed_years,
     )
 
