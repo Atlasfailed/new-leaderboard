@@ -43,6 +43,7 @@ const helpContent = {
           "Higher rating means a higher rank.",
           "The rating is slightly conservative for players whose rating is less certain.",
           "Games and win rate are shown for context; they do not add a separate bonus to player rank.",
+          "Large Team map badges go only to players in the top 5% for that map's play share, with at least 25 games.",
         ],
       },
     ],
@@ -251,7 +252,7 @@ function initializeControls() {
   });
   renderPeriodSelect(elements.playerPeriod, state.playerPeriod, async (period) => {
     state.playerPeriod = period;
-    showLoading(elements.playerRows, 7);
+    showLoading(elements.playerRows, 8);
     await loadPeriodData(period);
     renderPlayers();
   });
@@ -438,6 +439,7 @@ function renderPlayers() {
           return `<tr>
             <td>${formatNumber(rank)}</td>
             <td class="name-cell">${escapeHtml(row.name)}</td>
+            <td>${formatMapBadges(row.map_badges)}</td>
             <td><span class="pill">${escapeHtml(row.country || "-")}</span> <span class="muted">${escapeHtml(row.country_name || "")}</span></td>
             <td>${formatDecimal(row.rating, 2)}</td>
             <td>${formatNumber(row.games)}</td>
@@ -446,7 +448,7 @@ function renderPlayers() {
           </tr>`;
         })
         .join("")
-    : emptyRow(7);
+    : emptyRow(8);
 }
 
 function renderNations() {
@@ -538,6 +540,25 @@ function formatContributors(contributors) {
     return `<span class="muted">-</span>`;
   }
   return contributors.map((item) => `${escapeHtml(item.name)} <span class="muted">${formatDecimal(item.score, 2)}</span>`).join(", ");
+}
+
+function formatMapBadges(badges) {
+  if (!badges || badges.length === 0) {
+    return `<span class="muted">-</span>`;
+  }
+  return `<div class="badge-row">${badges.map(formatMapBadge).join("")}</div>`;
+}
+
+function formatMapBadge(badge) {
+  const share = formatPercent(badge.map_share);
+  const threshold = formatPercent(badge.threshold_share);
+  const title = `${badge.name}: ${share} on ${badge.map}; top ${100 - Number(badge.percentile || 95)}% cutoff ${threshold}`;
+  return `<span class="map-badge map-badge-${escapeHtml(badge.id || "map")}" title="${escapeHtml(title)}">
+    <span class="badge-copy">
+      <strong>${escapeHtml(badge.name)}</strong>
+      <small>${share}</small>
+    </span>
+  </span>`;
 }
 
 function emptyRow(columns) {

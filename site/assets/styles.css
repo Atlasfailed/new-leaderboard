@@ -275,7 +275,7 @@ input[type="range"] {
 
 table {
   width: 100%;
-  min-width: 820px;
+  min-width: 980px;
   border-collapse: collapse;
   font-size: 0.94rem;
 }
@@ -326,6 +326,85 @@ tbody tr:last-child td {
   color: #214876;
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 130px;
+}
+
+.map-badge {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  max-width: 160px;
+  overflow: hidden;
+  border: 1px solid rgba(23, 32, 29, 0.2);
+  border-radius: 7px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 18px rgba(25, 35, 31, 0.12);
+}
+
+.map-badge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.85;
+}
+
+.badge-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px 8px;
+  line-height: 1.05;
+}
+
+.badge-copy strong,
+.badge-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge-copy strong {
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.badge-copy small {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.map-badge-supremely_stuck {
+  background: #263f5f;
+}
+
+.map-badge-supremely_stuck::before {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 42%),
+    repeating-linear-gradient(90deg, transparent 0 12px, rgba(255, 255, 255, 0.05) 12px 13px),
+    linear-gradient(120deg, #182a42 0%, #345b83 58%, #b98f2f 100%);
+}
+
+.map-badge-all_that_grinds {
+  background: #352713;
+}
+
+.map-badge-all_that_grinds::before {
+  background:
+    radial-gradient(circle at 18% 24%, rgba(255, 229, 143, 0.65) 0 2px, transparent 3px),
+    radial-gradient(circle at 82% 70%, rgba(255, 229, 143, 0.55) 0 1px, transparent 3px),
+    linear-gradient(135deg, #1f1d1a 0%, #614314 46%, #d99b24 100%);
 }
 
 .empty {
