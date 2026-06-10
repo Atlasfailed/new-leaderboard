@@ -552,11 +552,14 @@ function formatMapBadges(badges) {
 function formatMapBadge(badge) {
   const share = formatPercent(badge.map_share);
   const threshold = formatPercent(badge.threshold_share);
-  const title = `${badge.name}: ${share} on ${badge.map}; top ${100 - Number(badge.percentile || 95)}% cutoff ${threshold}`;
+  const locked = Boolean(badge.locked);
+  const title = locked
+    ? `${badge.name}: permanently locked badge; current ${badge.map} share ${share}`
+    : `${badge.name}: ${share} on ${badge.map}; top ${100 - Number(badge.percentile || 95)}% cutoff ${threshold}`;
   return `<span class="map-badge map-badge-${escapeHtml(badge.id || "map")}" title="${escapeHtml(title)}">
     <span class="badge-copy">
       <strong>${escapeHtml(badge.name)}</strong>
-      <small>${share}</small>
+      <small>${locked ? "LOCKED" : share}</small>
     </span>
   </span>`;
 }

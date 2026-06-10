@@ -38,6 +38,9 @@ MAP_GRIND_BADGES = [
         "map_terms": ["all that glitters"],
     },
 ]
+MAP_GRIND_BADGE_LOCKS = {
+    303060: ["supremely_stuck"],
+}
 
 
 def _rank_within_group(frame: pd.DataFrame, group_cols: list[str], score_col: str, rank_col: str) -> pd.Series:
@@ -91,34 +94,64 @@ def _assign_map_grind_badges(ranking: pd.DataFrame, map_counts: dict[tuple[str, 
     if ranking.empty:
         return ranking
 
+    badge_by_id = {str(badge["id"]): badge for badge in MAP_GRIND_BADGES}
+    thresholds_by_badge: dict[str, float] = {}
     eligible = ranking[
         (ranking["game_mode"] == MAP_GRIND_BADGE_MODE) & (ranking["games"] >= MAP_GRIND_BADGE_MIN_GAMES)
     ].copy()
-    if eligible.empty:
-        return ranking
-
     badge_lookup: dict[tuple[str, int], list[dict[str, object]]] = defaultdict(list)
-    for badge in MAP_GRIND_BADGES:
-        shares: list[float] = []
-        player_shares: dict[tuple[str, int], tuple[int, float, str]] = {}
-        terms = list(badge["map_terms"])
-        for row in eligible.itertuples(index=False):
-            key = (str(row.game_mode), int(row.user_id))
-            counts = map_counts.get(key, [])
-            if not counts:
-                continue
-            target_games, share = _map_share(counts, terms, int(row.games))
-            top_map = str(counts[0]["map"]) if counts else ""
-            player_shares[key] = (target_games, share, top_map)
-            shares.append(share)
 
-        if not shares:
+    if not eligible.empty:
+        for badge in MAP_GRIND_BADGES:
+            shares: list[float] = []
+            player_shares: dict[tuple[str, int], tuple[int, float, str]] = {}
+            terms = list(badge["map_terms"])
+            for row in eligible.itertuples(index=False):
+                key = (str(row.game_mode), int(row.user_id))
+                counts = map_counts.get(key, [])
+                if not counts:
+                    continue
+                target_games, share = _map_share(counts, terms, int(row.games))
+                top_map = str(counts[0]["map"]) if counts else ""
+                player_shares[key] = (target_games, share, top_map)
+                shares.append(share)
+
+            if not shares:
+                continue
+
+            threshold = max(MAP_GRIND_BADGE_MIN_SHARE, float(np.quantile(shares, MAP_GRIND_BADGE_PERCENTILE)))
+            thresholds_by_badge[str(badge["id"])] = threshold
+            for key, (target_games, share, top_map) in player_shares.items():
+                if target_games <= 0 or share < threshold or not _map_matches(top_map, terms):
+                    continue
+                badge_lookup[key].append(
+                    {
+                        "id": badge["id"],
+                        "name": badge["name"],
+                        "map": badge["map_label"],
+                        "map_games": int(target_games),
+                        "map_share": round(share, 4),
+                        "threshold_share": round(threshold, 4),
+                        "min_games": MAP_GRIND_BADGE_MIN_GAMES,
+                        "percentile": int(MAP_GRIND_BADGE_PERCENTILE * 100),
+                    }
+                )
+
+    for row in ranking.itertuples(index=False):
+        if str(row.game_mode) != MAP_GRIND_BADGE_MODE:
+            continue
+        locked_badge_ids = MAP_GRIND_BADGE_LOCKS.get(int(row.user_id), [])
+        if not locked_badge_ids:
             continue
 
-        threshold = max(MAP_GRIND_BADGE_MIN_SHARE, float(np.quantile(shares, MAP_GRIND_BADGE_PERCENTILE)))
-        for key, (target_games, share, top_map) in player_shares.items():
-            if target_games <= 0 or share < threshold or not _map_matches(top_map, terms):
+        key = (str(row.game_mode), int(row.user_id))
+        existing_ids = {str(badge["id"]) for badge in badge_lookup.get(key, [])}
+        counts = map_counts.get(key, [])
+        for badge_id in locked_badge_ids:
+            if badge_id in existing_ids or badge_id not in badge_by_id:
                 continue
+            badge = badge_by_id[badge_id]
+            target_games, share = _map_share(counts, list(badge["map_terms"]), int(row.games))
             badge_lookup[key].append(
                 {
                     "id": badge["id"],
@@ -126,14 +159,12 @@ def _assign_map_grind_badges(ranking: pd.DataFrame, map_counts: dict[tuple[str, 
                     "map": badge["map_label"],
                     "map_games": int(target_games),
                     "map_share": round(share, 4),
-                    "threshold_share": round(threshold, 4),
+                    "threshold_share": round(thresholds_by_badge.get(badge_id, MAP_GRIND_BADGE_MIN_SHARE), 4),
                     "min_games": MAP_GRIND_BADGE_MIN_GAMES,
                     "percentile": int(MAP_GRIND_BADGE_PERCENTILE * 100),
+                    "locked": True,
                 }
             )
-
-    if not badge_lookup:
-        return ranking
 
     ranking["map_badges"] = [
         badge_lookup.get((str(row.game_mode), int(row.user_id)), []) for row in ranking.itertuples(index=False)
