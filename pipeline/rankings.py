@@ -38,8 +38,17 @@ MAP_GRIND_BADGES = [
         "map_terms": ["all that glitters"],
     },
 ]
-MAP_GRIND_BADGE_LOCKS = {
-    303060: ["supremely_stuck"],
+MAP_GRIND_BADGE_LOCKS: dict[int, list[str]] = {}
+CUSTOM_PLAYER_BADGES = {
+    303060: [
+        {
+            "id": "expert_shopper",
+            "name": "Expert Shopper",
+            "description": "Custom player badge",
+            "label": "SHOPPER",
+            "image": "assets/expert-shopper.png",
+        }
+    ],
 }
 
 
@@ -141,7 +150,8 @@ def _assign_map_grind_badges(ranking: pd.DataFrame, map_counts: dict[tuple[str, 
         if str(row.game_mode) != MAP_GRIND_BADGE_MODE:
             continue
         locked_badge_ids = MAP_GRIND_BADGE_LOCKS.get(int(row.user_id), [])
-        if not locked_badge_ids:
+        custom_badges = CUSTOM_PLAYER_BADGES.get(int(row.user_id), [])
+        if not locked_badge_ids and not custom_badges:
             continue
 
         key = (str(row.game_mode), int(row.user_id))
@@ -165,6 +175,14 @@ def _assign_map_grind_badges(ranking: pd.DataFrame, map_counts: dict[tuple[str, 
                     "locked": True,
                 }
             )
+            existing_ids.add(badge_id)
+
+        for badge in custom_badges:
+            badge_id = str(badge["id"])
+            if badge_id in existing_ids:
+                continue
+            badge_lookup[key].append({**badge, "locked": True})
+            existing_ids.add(badge_id)
 
     ranking["map_badges"] = [
         badge_lookup.get((str(row.game_mode), int(row.user_id)), []) for row in ranking.itertuples(index=False)

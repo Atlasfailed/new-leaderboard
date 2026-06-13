@@ -550,16 +550,26 @@ function formatMapBadges(badges) {
 }
 
 function formatMapBadge(badge) {
-  const share = formatPercent(badge.map_share);
-  const threshold = formatPercent(badge.threshold_share);
+  const hasMapStats = badge.map_share !== undefined && badge.threshold_share !== undefined && badge.map;
+  const share = hasMapStats ? formatPercent(badge.map_share) : "";
+  const threshold = hasMapStats ? formatPercent(badge.threshold_share) : "";
   const locked = Boolean(badge.locked);
-  const title = locked
+  const title = badge.description
+    ? `${badge.name}: ${badge.description}`
+    : locked && hasMapStats
     ? `${badge.name}: permanently locked badge; current ${badge.map} share ${share}`
-    : `${badge.name}: ${share} on ${badge.map}; top ${100 - Number(badge.percentile || 95)}% cutoff ${threshold}`;
+    : hasMapStats
+    ? `${badge.name}: ${share} on ${badge.map}; top ${100 - Number(badge.percentile || 95)}% cutoff ${threshold}`
+    : badge.name;
+  const detail = badge.label || (locked ? "LOCKED" : share);
+  const image = badge.image
+    ? `<img class="badge-image" src="${escapeHtml(badge.image)}" alt="" loading="lazy">`
+    : "";
   return `<span class="map-badge map-badge-${escapeHtml(badge.id || "map")}" title="${escapeHtml(title)}">
+    ${image}
     <span class="badge-copy">
       <strong>${escapeHtml(badge.name)}</strong>
-      <small>${locked ? "LOCKED" : share}</small>
+      ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
     </span>
   </span>`;
 }
