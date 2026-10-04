@@ -82,12 +82,12 @@ function render() {
     const backtest = state.data.model?.backtest;
     if (backtest?.accuracy) {
       el.summary.textContent += ` Kings win chance uses bonus, team sizes and average OpenSkill; tested on past games it picked the winner ${Math.round(backtest.accuracy * 100)}% of the time (${backtest.games} games).`;
-      const [low, mid, high] = backtest.bands || [];
-      if (low?.games && mid?.games && high?.games) {
+      const [tossUp, peasants, kings] = backtest.bands || [];
+      if (tossUp?.games && peasants?.games && kings?.games) {
         const pct = (band) => Math.round(band.accuracy * 100);
         el.summary.insertAdjacentHTML(
           "beforeend",
-          ` Favourite won: <span class="chance-low">grey (toss-up, under 60%) ${pct(low)}% of games</span>, <span class="chance-medium">yellow (60-70%) ${pct(mid)}%</span>, <span class="chance-high">cyan (70%+) ${pct(high)}%</span>.`
+          ` When the favourite is clear (60%+) it won: <span class="chance-high">cyan, Kings favourite ${pct(kings)}% of games</span>, <span class="chance-medium">yellow, Peasants favourite ${pct(peasants)}%</span>. <span class="chance-low">Grey (under 60%) is a toss-up, favourite won ${pct(tossUp)}%</span>.`
         );
       }
     }
@@ -122,8 +122,7 @@ function renderPlayers() {
 }
 
 function confidence(chance) {
-  const favourite = Math.max(chance, 1 - chance);
-  return favourite < 0.6 ? "low" : favourite < 0.7 ? "medium" : "high";
+  return chance >= 0.6 ? "high" : chance <= 0.4 ? "medium" : "low";
 }
 
 function renderGames() {

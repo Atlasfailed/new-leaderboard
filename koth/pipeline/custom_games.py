@@ -236,8 +236,7 @@ def fit_win_model(games: list[dict]) -> tuple[list[float], dict]:
     features = np.array([_win_features(game) for game in games])
     outcome = np.array([game["kings_won"] for game in games], dtype=float)
     hits = tested = 0
-    band_edges = [0.5, 0.6, 0.7, 1.01]
-    bands = [{"from": band_edges[i], "games": 0, "hits": 0} for i in range(3)]
+    bands = [{"name": name, "games": 0, "hits": 0} for name in ("toss_up", "peasants", "kings")]
     for start in range(WIN_WARMUP, len(games), WIN_STEP):
         weights = _fit_logistic(features[:start], outcome[:start])
         chance = 1 / (1 + np.exp(-features[start : start + WIN_STEP] @ weights))
@@ -245,12 +244,12 @@ def fit_win_model(games: list[dict]) -> tuple[list[float], dict]:
         tested += len(chance)
         favourite = np.maximum(chance, 1 - chance)
         correct = (chance > 0.5) == (outcome[start : start + WIN_STEP] > 0.5)
-        for i, band in enumerate(bands):
-            inside = (favourite >= band_edges[i]) & (favourite < band_edges[i + 1])
+        masks = [favourite < 0.6, (favourite >= 0.6) & (chance < 0.5), (favourite >= 0.6) & (chance > 0.5)]
+        for band, inside in zip(bands, masks):
             band["games"] += int(inside.sum())
             band["hits"] += int(correct[inside].sum())
     weights = _fit_logistic(features, outcome)
-    bands = [{"from": b["from"], "games": b["games"], "accuracy": round(b["hits"] / b["games"], 3) if b["games"] else None} for b in bands]
+    bands = [{"name": b["name"], "games": b["games"], "accuracy": round(b["hits"] / b["games"], 3) if b["games"] else None} for b in bands]
     return weights.tolist(), {"games": tested, "accuracy": round(hits / tested, 3), "bands": bands}
 
 
@@ -289,6 +288,11 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
     return details, ratings
 
 
+def _score(rating: float, games: int) -> float:
+    shrunk = START_RATING + (rating - START_RATING) * games / (games + SCORE_PRIOR_GAMES)
+    return shrunk + ACTIVITY_BONUS * math.log2(games)
+
+
 def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]:
     stats: dict[int, dict] = {}
     for game, detail in zip(games, details):
@@ -304,7 +308,7 @@ def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]
             entry["wins"] += won
             entry["last"] = game["start_time"]
             entry["rating"] = rating_after
-            entry["peak"] = max(entry["peak"], rating_after)
+            entry["peak"] = max(entry["peak"], _score(rating_after, entry["games"]))
             entry["results"].append(won)
 
     rows = []
@@ -324,12 +328,7 @@ def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]
                 "losses": entry["games"] - entry["wins"],
                 "win_rate": entry["wins"] / entry["games"],
                 "rating": round(entry["rating"], 1),
-                "score": round(
-                    START_RATING
-                    + (entry["rating"] - START_RATING) * entry["games"] / (entry["games"] + SCORE_PRIOR_GAMES)
-                    + ACTIVITY_BONUS * math.log2(entry["games"]),
-                    1,
-                ),
+                "score": round(_score(entry["rating"], entry["games"]), 1),
                 "peak": round(entry["peak"], 1),
                 "streak": streak if entry["results"][-1] else -streak,
                 "first_played": entry["first"],
