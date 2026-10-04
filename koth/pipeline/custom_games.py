@@ -37,6 +37,8 @@ START_RATING = 1500
 K_NEW = 48
 K_SETTLED = 24
 PROVISIONAL_GAMES = 8
+# Ranking score pulls the Elo toward 1500 until a player has many games.
+SCORE_PRIOR_GAMES = 15
 CACHE_PATH = REFERENCE_DIR / "custom_games.json"
 OUTPUT_NAME = "rankings.json"
 WIN_WARMUP = 80
@@ -320,13 +322,16 @@ def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]
                 "losses": entry["games"] - entry["wins"],
                 "win_rate": entry["wins"] / entry["games"],
                 "rating": round(entry["rating"], 1),
+                "score": round(
+                    START_RATING + (entry["rating"] - START_RATING) * entry["games"] / (entry["games"] + SCORE_PRIOR_GAMES), 1
+                ),
                 "peak": round(entry["peak"], 1),
                 "streak": streak if entry["results"][-1] else -streak,
                 "first_played": entry["first"],
                 "last_played": entry["last"],
             }
         )
-    rows.sort(key=lambda row: (-row["rating"], -row["games"], row["name"].lower()))
+    rows.sort(key=lambda row: (-row["score"], -row["games"], row["name"].lower()))
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
     return rows
