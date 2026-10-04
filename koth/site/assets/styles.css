@@ -195,6 +195,10 @@ main {
   border-color: rgba(145, 70, 255, 0.75);
 }
 
+.discord-link {
+  border-color: rgba(88, 101, 242, 0.85);
+}
+
 .social-link:hover {
   background: var(--surface-strong);
 }
