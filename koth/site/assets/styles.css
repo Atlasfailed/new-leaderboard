@@ -384,10 +384,7 @@ dialog::backdrop {
   cursor: pointer;
 }
 
-.confidence {
-  margin-left: 6px;
-  color: var(--muted, #8b98a8);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
+.chance { font-weight: 600; }
+.chance-low { color: #8b98a8; }
+.chance-medium { color: #f5d90a; }
+.chance-high { color: #19b5ff; }

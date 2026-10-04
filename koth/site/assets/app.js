@@ -73,7 +73,7 @@ function render() {
       el.summary.textContent += ` Kings win chance uses bonus, team sizes and average OpenSkill; tested on past games it picked the winner ${Math.round(backtest.accuracy * 100)}% of the time (${backtest.games} games).`;
       const [low, mid, high] = backtest.bands || [];
       if (low?.games && mid?.games && high?.games) {
-        el.summary.textContent += ` Low confidence (favourite under 60%): right ${Math.round(low.accuracy * 100)}% of the time. Medium (60-70%): ${Math.round(mid.accuracy * 100)}%. High (70% or more): ${Math.round(high.accuracy * 100)}%.`;
+        el.summary.textContent += ` Win chance colours: grey = low confidence (favourite under 60%), right ${Math.round(low.accuracy * 100)}% of the time. yellow = medium (60-70%): ${Math.round(mid.accuracy * 100)}%. cyan = high (70% or more): ${Math.round(high.accuracy * 100)}%.`;
       }
     }
   } else {
@@ -108,7 +108,7 @@ function renderPlayers() {
 
 function confidence(chance) {
   const favourite = Math.max(chance, 1 - chance);
-  return favourite < 0.6 ? "low confidence" : favourite < 0.7 ? "medium confidence" : "high confidence";
+  return favourite < 0.6 ? "low" : favourite < 0.7 ? "medium" : "high";
 }
 
 function renderGames() {
@@ -128,7 +128,7 @@ function renderGames() {
           <td title="${esc(g.kings.map(([, n]) => n).join(", "))}">${g.kings.length}</td>
           <td>${g.peasants.length}</td>
           <td>+${g.kings_handicap}%</td>
-          <td>${percent(g.kings_expected)} <span class="confidence">${confidence(g.kings_expected)}</span></td>
+          <td class="chance chance-${confidence(g.kings_expected)}">${percent(g.kings_expected)}</td>
           <td>${g.winner === "kings" ? "Kings" : "Peasants"}</td>
           <td>${minutes(g.duration_ms)}</td>
           <td>${replayLink(g.id)}</td>
