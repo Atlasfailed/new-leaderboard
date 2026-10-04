@@ -511,3 +511,5 @@ dialog::backdrop {
 .chance-low { color: #8b98a8; }
 .chance-medium { color: #f5d90a; }
 .chance-high { color: #19b5ff; }
+.delta-up { color: #19b5ff; }
+.delta-down { color: #ff5c5c; }

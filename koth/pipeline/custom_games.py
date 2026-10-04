@@ -360,8 +360,12 @@ def build_custom_rankings(cache: dict) -> dict:
             "peasants_wins": len(subset) - kings_wins,
         }
 
-    def roster(game: dict, role: str) -> list[list]:
-        return [[user_id, name] for user_id, name, *_ in game[role]]
+    def roster(game: dict, role: str, detail: dict) -> list[list]:
+        # [user_id, name, rating after the game, rating change]
+        return [
+            [user_id, name, round(detail["deltas"][role][user_id][1], 1), round(detail["deltas"][role][user_id][0], 1)]
+            for user_id, name, *_ in game[role]
+        ]
 
     return {
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -380,8 +384,8 @@ def build_custom_rankings(cache: dict) -> dict:
                 "kings_handicap": game["kings_handicap"],
                 "kings_expected": round(1 / (1 + math.exp(-float(np.dot(win_weights, _win_features(game))))), 3),
                 "winner": "kings" if game["kings_won"] else "peasants",
-                "kings": roster(game, "kings"),
-                "peasants": roster(game, "peasants"),
+                "kings": roster(game, "kings", detail),
+                "peasants": roster(game, "peasants", detail),
             }
             for (replay_id, game), detail in reversed(list(zip(games_with_ids, details)))
         ],
