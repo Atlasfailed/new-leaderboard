@@ -3,18 +3,17 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>All Reason No Logic</title>
-    <meta name="description" content="All Reason No Logic community links, latest videos, live streams and Sunday KOTH leaderboards for Beyond All Reason.">
+    <title>AllReasonNoLogic</title>
+    <meta name="description" content="AllReasonNoLogic community links, latest videos, live streams and Sunday leaderboards for Beyond All Reason.">
     <link rel="icon" href="assets/logo.jpg">
     <link rel="stylesheet" href="assets/styles.css">
   </head>
   <body>
     <header class="hero">
       <div class="hero-inner">
-        <img class="hero-logo" src="assets/logo.jpg" alt="All Reason No Logic logo">
+        <img class="hero-logo" src="assets/logo.jpg" alt="AllReasonNoLogic logo">
         <div>
-          <p class="eyebrow">Beyond All Reason &middot; King of the Hill</p>
-          <h1>All Reason No Logic <span>KOTH</span></h1>
+          <h1>AllReasonNoLogic</h1>
         </div>
         <div class="hero-stat">
           <span>Updated</span>
@@ -38,10 +37,9 @@
           </label>
         </div>
       </div>
-      <section id="homeWrap" class="home-wrap" aria-label="All Reason No Logic links and latest content" hidden>
+      <section id="homeWrap" class="home-wrap" aria-label="AllReasonNoLogic links and latest content" hidden>
         <div class="home-intro">
-          <p class="eyebrow">Beyond All Reason community</p>
-          <h2>All Reason No Logic</h2>
+          <h2>AllReasonNoLogic</h2>
           <p>Videos, streams and Sunday King of the Hill games.</p>
           <div class="social-links">
             <a class="social-link youtube-link" href="https://www.youtube.com/@AllReasonNoLogic" target="_blank" rel="noopener">YouTube channel</a>
@@ -52,7 +50,6 @@
           <article class="content-card">
             <div class="content-card-heading">
               <div>
-                <p class="eyebrow">YouTube</p>
                 <h3>Latest video</h3>
                 <p class="muted">The newest upload appears first.</p>
               </div>
@@ -60,7 +57,7 @@
             </div>
             <div class="embed-frame">
               <iframe
-                title="Latest All Reason No Logic YouTube videos"
+                title="Latest AllReasonNoLogic YouTube videos"
                 src="https://www.youtube-nocookie.com/embed/videoseries?list=UU2JnRxZ4G8l0hkVCHg-8v1Q"
                 loading="lazy"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -71,7 +68,6 @@
           <article class="content-card">
             <div class="content-card-heading">
               <div>
-                <p class="eyebrow">Twitch</p>
                 <h3>Live stream</h3>
                 <p class="muted">The channel player shows the stream when live.</p>
               </div>
@@ -80,14 +76,13 @@
             <div class="embed-frame">
               <iframe
                 id="twitchPlayer"
-                title="All Reason No Logic Twitch stream"
+                title="AllReasonNoLogic Twitch stream"
                 loading="lazy"
                 allowfullscreen></iframe>
             </div>
           </article>
         </div>
       </section>
-      <p id="summary" class="muted"></p>
 
       <div class="table-wrap" id="playersWrap">
         <table>
@@ -158,7 +153,7 @@
     </main>
 
     <footer>
-      Sunday KOTH leaderboard data is sourced from the Beyond All Reason replay API.
+      Sunday leaderboard data is sourced from the Beyond All Reason replay API.
     </footer>
 
     <dialog id="playerGames" aria-labelledby="playerGamesTitle">
@@ -168,6 +163,7 @@
           <button class="icon-button" type="button" id="playerGamesClose" aria-label="Close">X</button>
         </header>
         <div class="mode-group" id="playerGameModes" aria-label="Role"></div>
+        <div id="playerChart" class="player-chart"></div>
         <div class="table-wrap">
           <table>
             <thead>

@@ -1,4 +1,4 @@
-"""All Reason No Logic KOTH leaderboard (Kings vs Peasants).
+"""AllReasonNoLogic KOTH leaderboard (Kings vs Peasants).
 
 Custom king-of-the-hill games are organised on Sundays by a few known hosts. The
 small "kings" team gets a handicap bonus and fights a much larger "peasants"

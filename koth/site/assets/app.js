@@ -3,7 +3,7 @@ const el = {};
 
 document.addEventListener("DOMContentLoaded", async () => {
   [
-    "updated", "error", "modes", "toolbar", "homeWrap", "period", "search", "summary", "playersWrap", "playerRows", "mapsWrap", "mapRows",
+    "updated", "error", "modes", "toolbar", "homeWrap", "period", "search", "playersWrap", "playerRows", "playerChart", "mapsWrap", "mapRows",
     "chartTitle", "scatter", "bands", "gamesWrap", "gameRows", "playerGames", "playerGamesTitle", "playerGameModes",
     "playerGameRows", "playerGamesClose",
   ].forEach((id) => (el[id] = document.getElementById(id)));
@@ -66,12 +66,9 @@ function periodGames() {
 
 function render() {
   const isHome = state.mode === "Home";
-  const summary = state.data.summary[state.period] || { games: 0, kings_wins: 0, peasants_wins: 0 };
-  el.summary.textContent = `${summary.games} games: Kings won ${summary.kings_wins}, Peasants won ${summary.peasants_wins}.`;
   const { mode } = state;
   el.homeWrap.hidden = !isHome;
   el.toolbar.hidden = isHome;
-  el.summary.hidden = isHome;
   el.playersWrap.hidden = mode !== "Kings" && mode !== "Peasants";
   el.mapsWrap.hidden = mode !== "Maps";
   el.gamesWrap.hidden = mode !== "Games";
@@ -79,18 +76,6 @@ function render() {
     renderMaps();
   } else if (mode === "Games") {
     renderGames();
-    const backtest = state.data.model?.backtest;
-    if (backtest?.accuracy) {
-      el.summary.textContent += ` Kings win chance uses bonus, team sizes and average OpenSkill; tested on past games it picked the winner ${Math.round(backtest.accuracy * 100)}% of the time (${backtest.games} games).`;
-      const [tossUp, peasants, kings] = backtest.bands || [];
-      if (tossUp?.games && peasants?.games && kings?.games) {
-        const pct = (band) => Math.round(band.accuracy * 100);
-        el.summary.insertAdjacentHTML(
-          "beforeend",
-          ` When the favourite is clear (60%+) it won: <span class="chance-high">cyan, Kings favourite ${pct(kings)}% of games</span>, <span class="chance-medium">yellow, Peasants favourite ${pct(peasants)}%</span>. <span class="chance-low">Grey (under 60%) is a toss-up, favourite won ${pct(tossUp)}%</span>.`
-        );
-      }
-    }
   } else if (mode === "Kings" || mode === "Peasants") {
     renderPlayers();
   }
@@ -267,6 +252,7 @@ function renderPlayerGames() {
   const role = state.playerRole.toLowerCase();
   let wins = 0;
   const rows = [];
+  const points = [];
   periodGames().forEach((g) => {
     const entry = g[role].find(([userId]) => userId === id);
     if (!entry) {
@@ -275,6 +261,7 @@ function renderPlayerGames() {
     const [, , score, change] = entry;
     const won = g.winner === role;
     wins += won;
+    points.push({ time: g.start_time, score });
     rows.push(`<tr>
       <td>${formatDate(g.start_time)}</td>
       <td>${esc(g.map)}</td>
@@ -287,6 +274,27 @@ function renderPlayerGames() {
   });
   el.playerGamesTitle.textContent = `${name} - ${state.playerRole}: ${rows.length} games, ${wins} wins`;
   el.playerGameRows.innerHTML = rows.join("") || emptyRow(7);
+  el.playerChart.innerHTML = scoreChart(points.reverse());
+}
+
+function scoreChart(points) {
+  if (points.length < 2) {
+    return "";
+  }
+  const w = 800, h = 180, pad = { l: 44, r: 12, t: 12, b: 22 };
+  const scores = points.map((p) => p.score);
+  const lo = Math.floor(Math.min(...scores) / 10) * 10, hi = Math.ceil(Math.max(...scores) / 10) * 10 || lo + 10;
+  const x = (i) => pad.l + (i / (points.length - 1)) * (w - pad.l - pad.r);
+  const y = (v) => pad.t + (1 - (v - lo) / (hi - lo || 1)) * (h - pad.t - pad.b);
+  const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
+  const dots = points
+    .map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.score).toFixed(1)}" r="2.5"><title>${formatDate(p.time)}: ${Math.round(p.score)}</title></circle>`)
+    .join("");
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Score over time">
+    <text x="4" y="${pad.t + 4}">${hi}</text><text x="4" y="${h - pad.b}">${lo}</text>
+    <text x="${pad.l}" y="${h - 4}">${formatDate(points[0].time)}</text>
+    <text x="${w - pad.r}" y="${h - 4}" text-anchor="end">${formatDate(points[points.length - 1].time)}</text>
+    <polyline points="${line}" fill="none"/>${dots}</svg>`;
 }
 
 function modeButtons(container, modes, active, onSelect) {

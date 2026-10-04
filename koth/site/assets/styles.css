@@ -513,3 +513,7 @@ dialog::backdrop {
 .chance-high { color: #19b5ff; }
 .delta-up { color: #19b5ff; }
 .delta-down { color: #ff5c5c; }
+.player-chart svg { width: 100%; height: auto; margin: 8px 0; }
+.player-chart text { fill: #8b98a8; font-size: 11px; }
+.player-chart polyline { stroke: #19b5ff; stroke-width: 2; }
+.player-chart circle { fill: #19b5ff; }
