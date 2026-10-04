@@ -71,6 +71,10 @@ function render() {
     const backtest = state.data.model?.backtest;
     if (backtest?.accuracy) {
       el.summary.textContent += ` Kings win chance uses bonus, team sizes and average OpenSkill; tested on past games it picked the winner ${Math.round(backtest.accuracy * 100)}% of the time (${backtest.games} games).`;
+      const [low, mid, high] = backtest.bands || [];
+      if (low?.games && mid?.games && high?.games) {
+        el.summary.textContent += ` When the favourite is under 60% (toss-up) it was right ${Math.round(low.accuracy * 100)}% of the time, at 60-70% (lean) ${Math.round(mid.accuracy * 100)}%, and at 70% or more (strong) ${Math.round(high.accuracy * 100)}%.`;
+      }
     }
   } else {
     renderPlayers();
@@ -102,6 +106,11 @@ function renderPlayers() {
     : emptyRow(10);
 }
 
+function confidence(chance) {
+  const favourite = Math.max(chance, 1 - chance);
+  return favourite < 0.6 ? "toss-up" : favourite < 0.7 ? "lean" : "strong";
+}
+
 function renderGames() {
   const query = el.search.value.trim().toLowerCase();
   const games = periodGames().filter(
@@ -119,7 +128,7 @@ function renderGames() {
           <td title="${esc(g.kings.map(([, n]) => n).join(", "))}">${g.kings.length}</td>
           <td>${g.peasants.length}</td>
           <td>+${g.kings_handicap}%</td>
-          <td>${percent(g.kings_expected)}</td>
+          <td>${percent(g.kings_expected)} <span class="confidence">${confidence(g.kings_expected)}</span></td>
           <td>${g.winner === "kings" ? "Kings" : "Peasants"}</td>
           <td>${minutes(g.duration_ms)}</td>
           <td>${replayLink(g.id)}</td>

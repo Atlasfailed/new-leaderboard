@@ -383,3 +383,11 @@ dialog::backdrop {
   color: var(--ink);
   cursor: pointer;
 }
+
+.confidence {
+  margin-left: 6px;
+  color: var(--muted, #8b98a8);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

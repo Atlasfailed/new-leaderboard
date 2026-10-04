@@ -232,13 +232,22 @@ def fit_win_model(games: list[dict]) -> tuple[list[float], dict]:
     features = np.array([_win_features(game) for game in games])
     outcome = np.array([game["kings_won"] for game in games], dtype=float)
     hits = tested = 0
+    band_edges = [0.5, 0.6, 0.7, 1.01]
+    bands = [{"from": band_edges[i], "games": 0, "hits": 0} for i in range(3)]
     for start in range(WIN_WARMUP, len(games), WIN_STEP):
         weights = _fit_logistic(features[:start], outcome[:start])
         chance = 1 / (1 + np.exp(-features[start : start + WIN_STEP] @ weights))
         hits += int(np.sum((chance > 0.5) == (outcome[start : start + WIN_STEP] > 0.5)))
         tested += len(chance)
+        favourite = np.maximum(chance, 1 - chance)
+        correct = (chance > 0.5) == (outcome[start : start + WIN_STEP] > 0.5)
+        for i, band in enumerate(bands):
+            inside = (favourite >= band_edges[i]) & (favourite < band_edges[i + 1])
+            band["games"] += int(inside.sum())
+            band["hits"] += int(correct[inside].sum())
     weights = _fit_logistic(features, outcome)
-    return weights.tolist(), {"games": tested, "accuracy": round(hits / tested, 3)}
+    bands = [{"from": b["from"], "games": b["games"], "accuracy": round(b["hits"] / b["games"], 3) if b["games"] else None} for b in bands]
+    return weights.tolist(), {"games": tested, "accuracy": round(hits / tested, 3), "bands": bands}
 
 
 def _kings_chance(game: dict, baseline: list[float], kings_avg: float, peasants_avg: float) -> float:
