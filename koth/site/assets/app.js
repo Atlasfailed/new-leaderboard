@@ -100,8 +100,8 @@ function renderPlayers() {
   el.playerRows.innerHTML = rows.length
     ? rows
         .map(
-          (row, index) => `<tr>
-          <td>${index + 1}</td>
+          (row) => `<tr>
+          <td>${row.rank}</td>
           <td class="name-cell"><a href="#" data-user="${row.user_id}" data-name="${esc(row.name)}">${esc(row.name)}</a></td>
           <td>${esc(row.country)}</td>
           <td><strong>${Math.round(row.rating)}</strong></td>
