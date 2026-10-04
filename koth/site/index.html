@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>All Reason No Logic KOTH Leaderboard</title>
-    <meta name="description" content="Kings vs Peasants ratings, maps and games for the All Reason No Logic King of the Hill games in Beyond All Reason.">
+    <title>All Reason No Logic</title>
+    <meta name="description" content="All Reason No Logic community links, latest videos, live streams and Sunday KOTH leaderboards for Beyond All Reason.">
     <link rel="icon" href="assets/logo.jpg">
     <link rel="stylesheet" href="assets/styles.css">
   </head>
@@ -28,7 +28,7 @@
       <p id="error" class="error" hidden></p>
       <div class="view-header">
         <div class="mode-group" id="modes" aria-label="View"></div>
-        <div class="toolbar">
+        <div class="toolbar" id="toolbar">
           <label>
             <span>Year</span>
             <select id="period"></select>
@@ -39,6 +39,55 @@
           </label>
         </div>
       </div>
+      <section id="homeWrap" class="home-wrap" aria-label="All Reason No Logic links and latest content" hidden>
+        <div class="home-intro">
+          <p class="eyebrow">Beyond All Reason community</p>
+          <h2>All Reason No Logic</h2>
+          <p>Videos, streams and Sunday King of the Hill games.</p>
+          <div class="social-links">
+            <a class="social-link youtube-link" href="https://www.youtube.com/@AllReasonNoLogic" target="_blank" rel="noopener">YouTube channel</a>
+            <a class="social-link twitch-link" href="https://www.twitch.tv/allreasonnologic" target="_blank" rel="noopener">Twitch channel</a>
+          </div>
+        </div>
+        <div class="content-cards">
+          <article class="content-card">
+            <div class="content-card-heading">
+              <div>
+                <p class="eyebrow">YouTube</p>
+                <h3>Latest video</h3>
+                <p class="muted">The newest upload appears first.</p>
+              </div>
+              <a href="https://www.youtube.com/@AllReasonNoLogic" target="_blank" rel="noopener">More videos ↗</a>
+            </div>
+            <div class="embed-frame">
+              <iframe
+                title="Latest All Reason No Logic YouTube videos"
+                src="https://www.youtube-nocookie.com/embed/videoseries?list=UU2JnRxZ4G8l0hkVCHg-8v1Q"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allowfullscreen></iframe>
+            </div>
+          </article>
+          <article class="content-card">
+            <div class="content-card-heading">
+              <div>
+                <p class="eyebrow">Twitch</p>
+                <h3>Live stream</h3>
+                <p class="muted">The channel player shows the stream when live.</p>
+              </div>
+              <a href="https://www.twitch.tv/allreasonnologic" target="_blank" rel="noopener">Open Twitch ↗</a>
+            </div>
+            <div class="embed-frame">
+              <iframe
+                id="twitchPlayer"
+                title="All Reason No Logic Twitch stream"
+                loading="lazy"
+                allowfullscreen></iframe>
+            </div>
+          </article>
+        </div>
+      </section>
       <p id="summary" class="muted"></p>
 
       <div class="table-wrap" id="playersWrap">
@@ -110,8 +159,7 @@
     </main>
 
     <footer>
-      Fan-made, unofficial. Data from the Beyond All Reason replay API. Not affiliated with
-      <a href="https://www.youtube.com/@AllReasonNoLogic" target="_blank" rel="noopener">All Reason No Logic</a>.
+      Sunday KOTH leaderboard data is sourced from the Beyond All Reason replay API.
     </footer>
 
     <dialog id="playerGames" aria-labelledby="playerGamesTitle">

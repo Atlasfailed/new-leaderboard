@@ -1,9 +1,9 @@
-const state = { data: null, mode: "Kings", period: "all", map: null, playerRole: "Kings", player: null };
+const state = { data: null, mode: "Home", period: "all", map: null, playerRole: "Kings", player: null };
 const el = {};
 
 document.addEventListener("DOMContentLoaded", async () => {
   [
-    "updated", "error", "modes", "period", "search", "summary", "playersWrap", "playerRows", "mapsWrap", "mapRows",
+    "updated", "error", "modes", "toolbar", "homeWrap", "period", "search", "summary", "playersWrap", "playerRows", "mapsWrap", "mapRows",
     "chartTitle", "scatter", "bands", "gamesWrap", "gameRows", "playerGames", "playerGamesTitle", "playerGameModes",
     "playerGameRows", "playerGamesClose",
   ].forEach((id) => (el[id] = document.getElementById(id)));
@@ -20,10 +20,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   el.updated.textContent = formatDateTime(state.data.generatedAt);
   el.period.innerHTML = state.data.periods.map((p) => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join("");
-  modeButtons(el.modes, ["Kings", "Peasants", "Maps", "Games"], state.mode, (mode) => {
+  modeButtons(el.modes, ["Home", "Kings", "Peasants", "Maps", "Games"], state.mode, (mode) => {
     state.mode = mode;
     render();
   });
+  const twitchUrl = new URL("https://player.twitch.tv/");
+  twitchUrl.search = new URLSearchParams({
+    channel: "allreasonnologic",
+    parent: window.location.hostname,
+    muted: "true",
+  }).toString();
+  document.getElementById("twitchPlayer").src = twitchUrl.toString();
   el.period.addEventListener("change", () => {
     state.period = el.period.value;
     render();
@@ -58,9 +65,13 @@ function periodGames() {
 }
 
 function render() {
+  const isHome = state.mode === "Home";
   const summary = state.data.summary[state.period] || { games: 0, kings_wins: 0, peasants_wins: 0 };
   el.summary.textContent = `${summary.games} games: Kings won ${summary.kings_wins}, Peasants won ${summary.peasants_wins}.`;
   const { mode } = state;
+  el.homeWrap.hidden = !isHome;
+  el.toolbar.hidden = isHome;
+  el.summary.hidden = isHome;
   el.playersWrap.hidden = mode !== "Kings" && mode !== "Peasants";
   el.mapsWrap.hidden = mode !== "Maps";
   el.gamesWrap.hidden = mode !== "Games";
@@ -73,10 +84,10 @@ function render() {
       el.summary.textContent += ` Kings win chance uses bonus, team sizes and average OpenSkill; tested on past games it picked the winner ${Math.round(backtest.accuracy * 100)}% of the time (${backtest.games} games).`;
       const [low, mid, high] = backtest.bands || [];
       if (low?.games && mid?.games && high?.games) {
-        el.summary.textContent += ` Win chance colours: grey = low confidence (favourite under 60%), right ${Math.round(low.accuracy * 100)}% of the time. yellow = medium (60-70%): ${Math.round(mid.accuracy * 100)}%. cyan = high (70% or more): ${Math.round(high.accuracy * 100)}%.`;
+        el.summary.textContent += ` By chance band: grey (under 60%) was right ${Math.round(low.accuracy * 100)}% of the time; yellow (60-70%) ${Math.round(mid.accuracy * 100)}%; cyan (70% or more) ${Math.round(high.accuracy * 100)}%.`;
       }
     }
-  } else {
+  } else if (mode === "Kings" || mode === "Peasants") {
     renderPlayers();
   }
 }

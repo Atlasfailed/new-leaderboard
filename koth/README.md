@@ -1,8 +1,8 @@
 # All Reason No Logic KOTH Leaderboard
 
-A static Cloudflare Pages site with Elo ratings for the Sunday King of the Hill custom games in Beyond All Reason, hosted by TankTom, Twig, Praedyth and AllReasonNoLogic. A small handicapped "Kings" team plays a much larger "Peasants" team. Kings and Peasants are rated separately. Views: Kings, Peasants, Maps (win rate per map, setup scatter and win rate by team-size ratio) and Games (every game with a Kings win chance and replay link).
+A Cloudflare Pages site for the All Reason No Logic community, with channel links and embeds for the latest YouTube uploads and Twitch channel, as well as Sunday King of the Hill leaderboards for Beyond All Reason. The KOTH views are Kings, Peasants, Maps (win rate per map, setup scatter and win rate by team-size ratio) and Games (every game with a Kings win chance and replay link).
 
-Fan-made and unofficial. The look follows the All Reason No Logic channel (black, electric blue, yellow accent, logo from the channel avatar).
+The YouTube embed uses the channel's uploads playlist, which lists the newest upload first. The Twitch player loads the channel and uses the current site hostname as its required `parent` parameter; streams appear in the player when the channel is live.
 
 ## How games are found
 
