@@ -84,7 +84,11 @@ function render() {
       el.summary.textContent += ` Kings win chance uses bonus, team sizes and average OpenSkill; tested on past games it picked the winner ${Math.round(backtest.accuracy * 100)}% of the time (${backtest.games} games).`;
       const [low, mid, high] = backtest.bands || [];
       if (low?.games && mid?.games && high?.games) {
-        el.summary.textContent += ` By chance band: grey (under 60%) was right ${Math.round(low.accuracy * 100)}% of the time; yellow (60-70%) ${Math.round(mid.accuracy * 100)}%; cyan (70% or more) ${Math.round(high.accuracy * 100)}%.`;
+        const pct = (band) => Math.round(band.accuracy * 100);
+        el.summary.insertAdjacentHTML(
+          "beforeend",
+          ` By chance band: <span class="chance-low">grey (under 60%)</span> was right ${pct(low)}% of the time; <span class="chance-medium">yellow (60-70%)</span> ${pct(mid)}%; <span class="chance-high">cyan (70% or more)</span> ${pct(high)}%.`
+        );
       }
     }
   } else if (mode === "Kings" || mode === "Peasants") {
