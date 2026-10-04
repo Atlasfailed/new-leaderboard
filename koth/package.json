@@ -1,0 +1,10 @@
+{
+  "name": "bar-koth-leaderboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "data": "python3 -m pipeline.custom_games --no-refresh",
+    "scan": "python3 -m pipeline.custom_games",
+    "dev": "python3 -m http.server 4174 --directory site"
+  }
+}

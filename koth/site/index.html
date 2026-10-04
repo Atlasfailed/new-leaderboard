@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>All Reason No Logic KOTH Leaderboard</title>
+    <meta name="description" content="Kings vs Peasants ratings, maps and games for the All Reason No Logic King of the Hill games in Beyond All Reason.">
+    <link rel="icon" href="assets/logo.jpg">
+    <link rel="stylesheet" href="assets/styles.css">
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-inner">
+        <img class="hero-logo" src="assets/logo.jpg" alt="All Reason No Logic logo">
+        <div>
+          <p class="eyebrow">Beyond All Reason &middot; King of the Hill</p>
+          <h1>All Reason No Logic <span>KOTH</span></h1>
+          <p class="hero-sub">Kings vs Peasants ratings from the Sunday custom games.</p>
+        </div>
+        <div class="hero-stat">
+          <span>Updated</span>
+          <strong id="updated">-</strong>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <p id="error" class="error" hidden></p>
+      <div class="view-header">
+        <div class="mode-group" id="modes" aria-label="View"></div>
+        <div class="toolbar">
+          <label>
+            <span>Year</span>
+            <select id="period"></select>
+          </label>
+          <label>
+            <span>Search</span>
+            <input id="search" type="search" autocomplete="off" placeholder="Player or map">
+          </label>
+        </div>
+      </div>
+      <p id="summary" class="muted"></p>
+
+      <div class="table-wrap" id="playersWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Player</th>
+              <th>Country</th>
+              <th>Rating</th>
+              <th>Peak</th>
+              <th>Games</th>
+              <th>W-L</th>
+              <th>Win Rate</th>
+              <th>Streak</th>
+              <th>Last Played</th>
+            </tr>
+          </thead>
+          <tbody id="playerRows"></tbody>
+        </table>
+      </div>
+
+      <div id="mapsWrap" hidden>
+        <div class="maps-layout">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Map</th>
+                  <th>Games</th>
+                  <th>Kings Win Rate</th>
+                  <th>Avg Kings</th>
+                  <th>Avg Peasants</th>
+                  <th>Avg Bonus</th>
+                  <th>Avg Length</th>
+                </tr>
+              </thead>
+              <tbody id="mapRows"></tbody>
+            </table>
+          </div>
+          <div class="chart-panel">
+            <h3 id="chartTitle">All maps</h3>
+            <p class="muted">Each dot is a game. Cyan: Kings won. Red: Peasants won.</p>
+            <div id="scatter"></div>
+            <h4>Kings win rate by peasants per king</h4>
+            <div id="bands"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap" id="gamesWrap" hidden>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Map</th>
+              <th>Kings</th>
+              <th>Peasants</th>
+              <th>Bonus</th>
+              <th>Kings Win Chance</th>
+              <th>Winner</th>
+              <th>Length</th>
+              <th>Replay</th>
+            </tr>
+          </thead>
+          <tbody id="gameRows"></tbody>
+        </table>
+      </div>
+    </main>
+
+    <footer>
+      Fan-made, unofficial. Data from the Beyond All Reason replay API. Not affiliated with
+      <a href="https://www.youtube.com/@AllReasonNoLogic" target="_blank" rel="noopener">All Reason No Logic</a>.
+    </footer>
+
+    <dialog id="playerGames" aria-labelledby="playerGamesTitle">
+      <div class="panel">
+        <header>
+          <h2 id="playerGamesTitle">Games</h2>
+          <button class="icon-button" type="button" id="playerGamesClose" aria-label="Close">X</button>
+        </header>
+        <div class="mode-group" id="playerGameModes" aria-label="Role"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Map</th>
+                <th>Result</th>
+                <th>Teams</th>
+                <th>Replay</th>
+              </tr>
+            </thead>
+            <tbody id="playerGameRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
+
+    <script src="assets/app.js"></script>
+  </body>
+</html>
