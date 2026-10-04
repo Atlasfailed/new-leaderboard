@@ -369,12 +369,21 @@ def build_custom_rankings(cache: dict) -> dict:
             "peasants_wins": len(subset) - kings_wins,
         }
 
-    def roster(game: dict, role: str, detail: dict) -> list[list]:
-        # [user_id, name, rating after the game, rating change]
-        return [
-            [user_id, name, round(detail["deltas"][role][user_id][1], 1), round(detail["deltas"][role][user_id][0], 1)]
-            for user_id, name, *_ in game[role]
-        ]
+    # Score after every game per player and role, in play order: [id, name, score, score change].
+    seen = {role: defaultdict(int) for role in ROLES}
+    last_score = {role: defaultdict(lambda: float(START_RATING)) for role in ROLES}
+    rosters = []
+    for (_, game), detail in zip(games_with_ids, details):
+        per_role = {}
+        for role in ROLES:
+            rows = []
+            for user_id, name, *_ in game[role]:
+                seen[role][user_id] += 1
+                score = _score(detail["deltas"][role][user_id][1], seen[role][user_id])
+                rows.append([user_id, name, round(score, 1), round(score - last_score[role][user_id], 1)])
+                last_score[role][user_id] = score
+            per_role[role] = rows
+        rosters.append(per_role)
 
     return {
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -393,10 +402,10 @@ def build_custom_rankings(cache: dict) -> dict:
                 "kings_handicap": game["kings_handicap"],
                 "kings_expected": round(1 / (1 + math.exp(-float(np.dot(win_weights, _win_features(game))))), 3),
                 "winner": "kings" if game["kings_won"] else "peasants",
-                "kings": roster(game, "kings", detail),
-                "peasants": roster(game, "peasants", detail),
+                "kings": rosters[index]["kings"],
+                "peasants": rosters[index]["peasants"],
             }
-            for (replay_id, game), detail in reversed(list(zip(games_with_ids, details)))
+            for index, (replay_id, game) in reversed(list(enumerate(games_with_ids)))
         ],
     }
 

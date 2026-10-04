@@ -272,7 +272,7 @@ function renderPlayerGames() {
     if (!entry) {
       return;
     }
-    const [, , elo, change] = entry;
+    const [, , score, change] = entry;
     const won = g.winner === role;
     wins += won;
     rows.push(`<tr>
@@ -280,7 +280,7 @@ function renderPlayerGames() {
       <td>${esc(g.map)}</td>
       <td>${won ? "Win" : "Loss"}</td>
       <td>${g.kings.length} vs ${g.peasants.length}</td>
-      <td>${Math.round(elo)}</td>
+      <td>${Math.round(score)}</td>
       <td class="${change > 0 ? "delta-up" : change < 0 ? "delta-down" : ""}">${change > 0 ? "+" : ""}${change.toFixed(1)}</td>
       <td>${replayLink(g.id)}</td>
     </tr>`);
