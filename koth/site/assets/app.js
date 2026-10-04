@@ -73,7 +73,7 @@ function render() {
       el.summary.textContent += ` Kings win chance uses bonus, team sizes and average OpenSkill; tested on past games it picked the winner ${Math.round(backtest.accuracy * 100)}% of the time (${backtest.games} games).`;
       const [low, mid, high] = backtest.bands || [];
       if (low?.games && mid?.games && high?.games) {
-        el.summary.textContent += ` When the favourite is under 60% (toss-up) it was right ${Math.round(low.accuracy * 100)}% of the time, at 60-70% (lean) ${Math.round(mid.accuracy * 100)}%, and at 70% or more (strong) ${Math.round(high.accuracy * 100)}%.`;
+        el.summary.textContent += ` Low confidence (favourite under 60%): right ${Math.round(low.accuracy * 100)}% of the time. Medium (60-70%): ${Math.round(mid.accuracy * 100)}%. High (70% or more): ${Math.round(high.accuracy * 100)}%.`;
       }
     }
   } else {
@@ -108,7 +108,7 @@ function renderPlayers() {
 
 function confidence(chance) {
   const favourite = Math.max(chance, 1 - chance);
-  return favourite < 0.6 ? "toss-up" : favourite < 0.7 ? "lean" : "strong";
+  return favourite < 0.6 ? "low confidence" : favourite < 0.7 ? "medium confidence" : "high confidence";
 }
 
 function renderGames() {
