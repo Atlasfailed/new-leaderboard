@@ -87,7 +87,7 @@ function render() {
         const pct = (band) => Math.round(band.accuracy * 100);
         el.summary.insertAdjacentHTML(
           "beforeend",
-          ` By chance band: <span class="chance-low">grey (under 60%)</span> was right ${pct(low)}% of the time; <span class="chance-medium">yellow (60-70%)</span> ${pct(mid)}%; <span class="chance-high">cyan (70% or more)</span> ${pct(high)}%.`
+          ` Favourite won: <span class="chance-low">grey (toss-up, under 60%) ${pct(low)}% of games</span>, <span class="chance-medium">yellow (60-70%) ${pct(mid)}%</span>, <span class="chance-high">cyan (70%+) ${pct(high)}%</span>.`
         );
       }
     }
