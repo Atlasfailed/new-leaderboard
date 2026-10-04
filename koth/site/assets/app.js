@@ -109,7 +109,6 @@ function renderPlayers() {
           <td class="name-cell"><a href="#" data-user="${row.user_id}" data-name="${esc(row.name)}">${esc(row.name)}</a></td>
           <td>${esc(row.country)}</td>
           <td><strong>${Math.round(row.score)}</strong></td>
-          <td>${Math.round(row.rating)}</td>
           <td>${Math.round(row.peak)}</td>
           <td>${row.games}</td>
           <td>${row.wins}-${row.losses}</td>
@@ -119,7 +118,7 @@ function renderPlayers() {
         </tr>`
         )
         .join("")
-    : emptyRow(11);
+    : emptyRow(10);
 }
 
 function confidence(chance) {
