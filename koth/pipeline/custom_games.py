@@ -37,10 +37,12 @@ START_RATING = 1500
 K_NEW = 48
 K_SETTLED = 24
 PROVISIONAL_GAMES = 8
-# Ranking score pulls the Elo toward 1500 until a player has many games.
-SCORE_PRIOR_GAMES = 15
-# Extra score points per doubling of games played, rewarding regulars.
-ACTIVITY_BONUS = 12.0
+# Ranking score is a conservative estimate: Elo minus SCORE_K x uncertainty.
+# Uncertainty starts at SIGMA_START and shrinks with games played.
+SIGMA_START = 350.0
+SIGMA_GAMES_SCALE = 5.0
+SIGMA_FLOOR = 50.0
+SCORE_K = 2.0
 CACHE_PATH = REFERENCE_DIR / "custom_games.json"
 OUTPUT_NAME = "rankings.json"
 WIN_WARMUP = 80
@@ -288,9 +290,12 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
     return details, ratings
 
 
+def _sigma(games: int) -> float:
+    return max(SIGMA_FLOOR, SIGMA_START / math.sqrt(1 + games / SIGMA_GAMES_SCALE))
+
+
 def _score(rating: float, games: int) -> float:
-    shrunk = START_RATING + (rating - START_RATING) * games / (games + SCORE_PRIOR_GAMES)
-    return shrunk + ACTIVITY_BONUS * math.log2(games)
+    return rating - SCORE_K * _sigma(games)
 
 
 def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]:
