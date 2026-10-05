@@ -376,7 +376,7 @@ def build_custom_rankings(cache: dict) -> dict:
 
     # Score after every game per player and role, in play order: [id, name, score, score change].
     seen = {role: defaultdict(int) for role in ROLES}
-    last_score = {role: defaultdict(lambda: float(START_RATING)) for role in ROLES}
+    last_score = {role: defaultdict(lambda: _score(START_RATING, 0)) for role in ROLES}
     rosters = []
     for (_, game), detail in zip(games_with_ids, details):
         per_role = {}
