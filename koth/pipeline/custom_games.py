@@ -41,7 +41,7 @@ PROVISIONAL_GAMES = 8
 # Uncertainty starts at SIGMA_START and shrinks with games played.
 SIGMA_START = 350.0
 SIGMA_GAMES_SCALE = 5.0
-SIGMA_FLOOR = 50.0
+SIGMA_FLOOR_GAMES = 50
 SCORE_K = 2.0
 CACHE_PATH = REFERENCE_DIR / "custom_games.json"
 OUTPUT_NAME = "rankings.json"
@@ -291,7 +291,7 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
 
 
 def _sigma(games: int) -> float:
-    return max(SIGMA_FLOOR, SIGMA_START / math.sqrt(1 + games / SIGMA_GAMES_SCALE))
+    return SIGMA_START / math.sqrt(1 + min(games, SIGMA_FLOOR_GAMES) / SIGMA_GAMES_SCALE)
 
 
 def _score(rating: float, games: int) -> float:

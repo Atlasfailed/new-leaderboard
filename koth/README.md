@@ -13,7 +13,7 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
 ## Ratings
 
 - Elo, start 1500, one rating per role. K is 48 for a player's first 8 games in a role, then 24. Everyone on a team gets the same change.
-- Rank is by Score = Elo - 2 x sigma, where sigma = max(50, 350 / sqrt(1 + games / 5)) is the uncertainty about the rating. New players start low and rise as they prove themselves; the Elo itself is the hidden rating.
+- Rank is by Score = Elo - 2 x sigma, where sigma = 350 / sqrt(1 + min(games, 50) / 5) is the uncertainty about the rating; it stops shrinking at 50 games. New players start low and rise as they prove themselves; the Elo itself is the hidden rating.
 - The expected result starts from a logistic fit on bonus and team-size ratio, shifted by the difference of the team average ratings.
 - The Kings win chance on the Games view is a separate logistic fit on bonus, team-size ratio and the mean OpenSkill gap. Its walk-forward backtest accuracy (about 66%) is written to `model.backtest` and shown on the Games view.
 
