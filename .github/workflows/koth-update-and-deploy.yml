@@ -8,8 +8,11 @@ on:
       - "koth/**"
       - ".github/workflows/koth-update-and-deploy.yml"
   schedule:
-    # Games are played on Sundays; scan on Monday morning (UTC).
-    - cron: "0 5 * * 1"
+    # Run every 20 minutes from 12:00 through 18:00 Central European local time.
+    - cron: "*/20 12-17 * * 0"
+      timezone: "Europe/Brussels"
+    - cron: "0 18 * * 0"
+      timezone: "Europe/Brussels"
   workflow_dispatch:
 
 permissions:
