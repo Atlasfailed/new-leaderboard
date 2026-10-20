@@ -286,7 +286,11 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
                 ratings[role][user_id] += delta
                 played[role][user_id] += 1
                 deltas[role][user_id] = (delta, ratings[role][user_id])
-        details.append({"expected": expected, "deltas": deltas})
+        role_games = {
+            role: {user_id: played[role][user_id] for user_id, *_ in game[role]}
+            for role in ROLES
+        }
+        details.append({"expected": expected, "deltas": deltas, "role_games": role_games})
     return details, ratings
 
 
@@ -313,7 +317,8 @@ def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]
             entry["wins"] += won
             entry["last"] = game["start_time"]
             entry["rating"] = rating_after
-            entry["peak"] = max(entry["peak"], _score(rating_after, entry["games"]))
+            entry["role_games"] = detail["role_games"][role][user_id]
+            entry["peak"] = max(entry["peak"], _score(rating_after, entry["role_games"]))
             entry["results"].append(won)
 
     rows = []
@@ -333,7 +338,7 @@ def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]
                 "losses": entry["games"] - entry["wins"],
                 "win_rate": entry["wins"] / entry["games"],
                 "rating": round(entry["rating"], 1),
-                "score": round(_score(entry["rating"], entry["games"]), 1),
+                "score": round(_score(entry["rating"], entry["role_games"]), 1),
                 "peak": round(entry["peak"], 1),
                 "streak": streak if entry["results"][-1] else -streak,
                 "first_played": entry["first"],
@@ -375,7 +380,6 @@ def build_custom_rankings(cache: dict) -> dict:
         }
 
     # Score after every game per player and role, in play order: [id, name, score, score change].
-    seen = {role: defaultdict(int) for role in ROLES}
     last_score = {role: defaultdict(lambda: _score(START_RATING, 0)) for role in ROLES}
     rosters = []
     for (_, game), detail in zip(games_with_ids, details):
@@ -383,8 +387,7 @@ def build_custom_rankings(cache: dict) -> dict:
         for role in ROLES:
             rows = []
             for user_id, name, *_ in game[role]:
-                seen[role][user_id] += 1
-                score = _score(detail["deltas"][role][user_id][1], seen[role][user_id])
+                score = _score(detail["deltas"][role][user_id][1], detail["role_games"][role][user_id])
                 rows.append([user_id, name, round(score, 1), round(score - last_score[role][user_id], 1)])
                 last_score[role][user_id] = score
             per_role[role] = rows

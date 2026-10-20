@@ -32,6 +32,32 @@ a {
   color: var(--primary);
 }
 
+th[data-sort] button {
+  border: 0;
+  padding: 6px 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+th[data-sort] button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
+th[aria-sort="ascending"] button::after {
+  content: " \2191";
+  color: var(--primary);
+}
+
+th[aria-sort="descending"] button::after {
+  content: " \2193";
+  color: var(--primary);
+}
+
 .hero {
   border-bottom: 1px solid var(--line);
   background: linear-gradient(90deg, rgba(25, 181, 255, 0.1), transparent 60%);

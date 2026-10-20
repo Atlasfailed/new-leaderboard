@@ -1,4 +1,4 @@
-const state = { data: null, mode: "Home", period: "all", map: null, playerRole: "Kings", player: null };
+const state = { data: null, mode: "Home", period: null, map: null, playerRole: "Kings", player: null, sort: { key: "rank", direction: "ascending" } };
 const el = {};
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -19,7 +19,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
   el.updated.textContent = formatDateTime(state.data.generatedAt);
+  state.period = state.data.periods.find((p) => p.id !== "all")?.id || "all";
   el.period.innerHTML = state.data.periods.map((p) => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join("");
+  el.period.value = state.period;
+  document.querySelectorAll("#playersWrap th[data-sort]").forEach((header) => {
+    header.querySelector("button").addEventListener("click", () => {
+      const key = header.dataset.sort;
+      state.sort = {
+        key,
+        direction: state.sort.key === key
+          ? (state.sort.direction === "ascending" ? "descending" : "ascending")
+          : (["rank", "name", "country"].includes(key) ? "ascending" : "descending"),
+      };
+      renderPlayers();
+    });
+  });
   modeButtons(el.modes, ["Home", "Kings", "Peasants", "Maps", "Games"], state.mode, (mode) => {
     state.mode = mode;
     render();
@@ -85,7 +99,10 @@ function renderPlayers() {
   const query = el.search.value.trim().toLowerCase();
   const rows = (state.data.rankings[state.mode.toLowerCase()][state.period] || []).filter(
     (row) => !query || row.name.toLowerCase().includes(query)
-  );
+  ).sort(comparePlayers);
+  document.querySelectorAll("#playersWrap th[data-sort]").forEach((header) => {
+    header.setAttribute("aria-sort", header.dataset.sort === state.sort.key ? state.sort.direction : "none");
+  });
   el.playerRows.innerHTML = rows.length
     ? rows
         .map(
@@ -104,6 +121,18 @@ function renderPlayers() {
         )
         .join("")
     : emptyRow(10);
+}
+
+function comparePlayers(a, b) {
+  const { key, direction } = state.sort;
+  const left = a[key], right = b[key];
+  let order = typeof left === "string"
+    ? left.localeCompare(right, "en", { sensitivity: "base" })
+    : left - right;
+  if (key === "wins" && order === 0) {
+    order = b.losses - a.losses;
+  }
+  return (direction === "ascending" ? order : -order) || a.rank - b.rank;
 }
 
 function confidence(chance) {

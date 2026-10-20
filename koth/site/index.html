@@ -88,16 +88,16 @@
         <table>
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>Player</th>
-              <th>Country</th>
-              <th title="Rating minus twice the uncertainty, which shrinks as a player plays more games.">Score</th>
-              <th title="Highest Score reached">Peak Score</th>
-              <th>Games</th>
-              <th>W-L</th>
-              <th>Win Rate</th>
-              <th>Streak</th>
-              <th>Last Played</th>
+              <th data-sort="rank" aria-sort="ascending"><button type="button">Rank</button></th>
+              <th data-sort="name"><button type="button">Player</button></th>
+              <th data-sort="country"><button type="button">Country</button></th>
+              <th data-sort="score" title="Rating minus twice the uncertainty, using cumulative role games across all years."><button type="button">Score</button></th>
+              <th data-sort="peak" title="Highest Score reached in the selected period, using cumulative role experience."><button type="button">Peak Score</button></th>
+              <th data-sort="games" title="Games in the selected period and role"><button type="button">Games</button></th>
+              <th data-sort="wins" title="Sort by wins, then fewer losses"><button type="button">W-L</button></th>
+              <th data-sort="win_rate"><button type="button">Win Rate</button></th>
+              <th data-sort="streak"><button type="button">Streak</button></th>
+              <th data-sort="last_played"><button type="button">Last Played</button></th>
             </tr>
           </thead>
           <tbody id="playerRows"></tbody>

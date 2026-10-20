@@ -12,6 +12,14 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
 
 ## Ratings
 
+- Yearly Kings and Peasants tables include only players active in that year.
+  Games, W-L, win rate, streak and Peak Score describe the selected year.
+  Elo and the experience used for the Score deduction carry forward across
+  years, using only role games played up to each historical game. The final
+  player-history Score therefore matches the yearly leaderboard Score.
+  The latest available year (currently 2026) is selected by default.
+  Every player-table column can be sorted in either direction using its header;
+  W-L sorts by wins, with fewer losses first when sorting descending.
 - Elo, start 1500, one rating per role. K is 48 for a player's first 8 games in a role, then 24. Everyone on a team gets the same change.
 - Rank is by Score = Elo - 2 x sigma, where sigma = 350 / sqrt(1 + min(games, 50) / 5) is the uncertainty about the rating; it stops shrinking at 50 games. New players start low and rise as they prove themselves; the Elo itself is the hidden rating.
 - The expected result starts from a logistic fit on bonus and team-size ratio, shifted by the difference of the team average ratings.
