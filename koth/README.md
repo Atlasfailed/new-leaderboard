@@ -14,14 +14,20 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
 
 - Yearly Kings and Peasants tables include only players active in that year.
   Games, W-L, win rate, streak and Peak Score describe the selected year.
-  Elo and the experience used for the Score deduction carry forward across
-  years, using only role games played up to each historical game. The final
-  player-history Score therefore matches the yearly leaderboard Score.
+  Elo carries forward unchanged. Yearly Scores use recent effective role
+  experience: between games it halves every 90 days, each game adds one,
+  and the accumulator is capped at 50 before carrying it forward.
+  Completed years freeze the deduction at 31 December 23:59:59 UTC; the
+  current year's Scores and ranks keep decaying in the browser (refreshed
+  every minute), even without a data rebuild. All time uses cumulative
+  role games with no decay and retains its original Scores and history.
+  Yearly Peak Score and player history use decayed experience at each game;
+  the table can be lower than the last game Score due to subsequent inactivity.
   The latest available year (currently 2026) is selected by default.
   Every player-table column can be sorted in either direction using its header;
   W-L sorts by wins, with fewer losses first when sorting descending.
 - Elo, start 1500, one rating per role. K is 48 for a player's first 8 games in a role, then 24. Everyone on a team gets the same change.
-- Rank is by Score = Elo - 2 x sigma, where sigma = 350 / sqrt(1 + min(games, 50) / 5) is the uncertainty about the rating; it stops shrinking at 50 games. New players start low and rise as they prove themselves; the Elo itself is the hidden rating.
+- Rank is by Score = Elo - 2 x sigma, where sigma = 350 / sqrt(1 + min(experience, 50) / 5). Experience means cumulative role games for All time and the decaying effective count for year views. This is a participation heuristic, not calibrated statistical uncertainty.
 - The expected result starts from a logistic fit on bonus and team-size ratio, shifted by the difference of the team average ratings.
 - The Kings win chance on the Games view is a separate logistic fit on bonus, team-size ratio and the mean OpenSkill gap. Its walk-forward backtest accuracy (about 66%) is written to `model.backtest` and shown on the Games view.
 

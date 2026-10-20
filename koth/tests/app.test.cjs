@@ -38,3 +38,47 @@ test("equal values preserve official rank order in both directions", () => {
 test("name comparison ignores case", () => {
   assert.ok(compare("name", "ascending", { rank: 1, name: "alice" }, { rank: 2, name: "Bob" }) < 0);
 });
+
+function decayedRows(period, now) {
+  context.period = period;
+  context.now = Date.parse(now);
+  vm.runInContext(`
+    state.mode = "Kings";
+    state.period = period;
+    state.data = {
+      scoreDecay: {halfLifeDays: 90, maxGames: 50, sigmaStart: 350, gamesScale: 5, scoreK: 2},
+      rankings: {kings: Object.fromEntries(["all", "2025", "2026"].map(year => [year, [
+        {user_id: 1, name: "A", games: 1, rank: 1, score: 1488.9, peak: 1488.9,
+         experience: {games: 50, asOf: "2025-12-31T23:59:59Z", rating: 1700}},
+        {user_id: 2, name: "B", games: 10, rank: 2, score: 1400, peak: 1400,
+         experience: {games: 10, asOf: "2026-06-01T00:00:00Z", rating: 1800}}
+      ]]))}
+    };
+  `, context);
+  return JSON.parse(vm.runInContext("JSON.stringify(playerRankings(now))", context));
+}
+
+test("All time never decays", () => {
+  assert.deepEqual(decayedRows("all", "2026-07-01"), decayedRows("all", "2029-01-01"));
+});
+
+test("completed years freeze at year-end", () => {
+  assert.deepEqual(decayedRows("2025", "2026-07-01"), decayedRows("2025", "2029-01-01"));
+  assert.deepEqual(decayedRows("2026", "2027-01-01"), decayedRows("2026", "2029-01-01"));
+});
+
+test("current year scores decrease without rebuilding data and ranks update", () => {
+  const early = decayedRows("2026", "2026-06-01");
+  const late = decayedRows("2026", "2026-12-01");
+  for (const row of late) {
+    assert.ok(row.score < early.find(r => r.user_id === row.user_id).score);
+  }
+  assert.ok(late.every((row, i) => row.rank === i + 1 && (!i || late[i - 1].score >= row.score)));
+});
+
+test("one half-life halves effective experience exactly", () => {
+  const rows = decayedRows("2026", "2026-03-31T23:59:59Z");
+  const score = rows.find(r => r.user_id === 1).score;
+  const expected = Math.round((1700 - 700 / Math.sqrt(1 + 25 / 5)) * 10) / 10;
+  assert.equal(score, expected);
+});

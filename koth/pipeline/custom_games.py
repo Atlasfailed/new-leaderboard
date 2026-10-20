@@ -43,6 +43,7 @@ SIGMA_START = 350.0
 SIGMA_GAMES_SCALE = 5.0
 SIGMA_FLOOR_GAMES = 50
 SCORE_K = 2.0
+EXPERIENCE_HALF_LIFE_DAYS = 90.0
 CACHE_PATH = REFERENCE_DIR / "custom_games.json"
 OUTPUT_NAME = "rankings.json"
 WIN_WARMUP = 80
@@ -269,8 +270,10 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
     """
     ratings = {role: defaultdict(lambda: START_RATING) for role in ROLES}
     played = {role: defaultdict(int) for role in ROLES}
+    experience = {role: {} for role in ROLES}
     details = []
     for game in games:
+        game_time = _parse_time(game["start_time"])
         average = {
             role: sum(ratings[role][user_id] for user_id, *_ in game[role]) / max(len(game[role]), 1)
             for role in ROLES
@@ -290,19 +293,31 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
             role: {user_id: played[role][user_id] for user_id, *_ in game[role]}
             for role in ROLES
         }
-        details.append({"expected": expected, "deltas": deltas, "role_games": role_games})
+        effective_games = {role: {} for role in ROLES}
+        for role in ROLES:
+            for user_id, *_ in game[role]:
+                count, last = experience[role].get(user_id, (0.0, game_time))
+                count = min(SIGMA_FLOOR_GAMES, _decay_games(count, last, game_time) + 1)
+                experience[role][user_id] = (count, game_time)
+                effective_games[role][user_id] = count
+        details.append({"expected": expected, "deltas": deltas, "role_games": role_games, "effective_games": effective_games})
     return details, ratings
 
 
-def _sigma(games: int) -> float:
+def _decay_games(games: float, last: datetime, as_of: datetime) -> float:
+    days = max(0.0, (as_of - last).total_seconds() / 86400)
+    return games * 2 ** (-days / EXPERIENCE_HALF_LIFE_DAYS)
+
+
+def _sigma(games: float) -> float:
     return SIGMA_START / math.sqrt(1 + min(games, SIGMA_FLOOR_GAMES) / SIGMA_GAMES_SCALE)
 
 
-def _score(rating: float, games: int) -> float:
+def _score(rating: float, games: float) -> float:
     return rating - SCORE_K * _sigma(games)
 
 
-def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]:
+def _build_role(games: list[dict], details: list[dict], role: str, as_of: datetime | None = None) -> list[dict]:
     stats: dict[int, dict] = {}
     for game, detail in zip(games, details):
         won = game["kings_won"] == (role == "kings")
@@ -318,11 +333,16 @@ def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]
             entry["last"] = game["start_time"]
             entry["rating"] = rating_after
             entry["role_games"] = detail["role_games"][role][user_id]
-            entry["peak"] = max(entry["peak"], _score(rating_after, entry["role_games"]))
+            entry["effective_games"] = detail["effective_games"][role][user_id]
+            score_games = entry["effective_games"] if as_of is not None else entry["role_games"]
+            entry["peak"] = max(entry["peak"], _score(rating_after, score_games))
             entry["results"].append(won)
 
     rows = []
     for user_id, entry in stats.items():
+        score_games = entry["role_games"] if as_of is None else _decay_games(
+            entry["effective_games"], _parse_time(entry["last"]), as_of
+        )
         streak = 0
         for won in reversed(entry["results"]):
             if won != entry["results"][-1]:
@@ -338,20 +358,27 @@ def _build_role(games: list[dict], details: list[dict], role: str) -> list[dict]
                 "losses": entry["games"] - entry["wins"],
                 "win_rate": entry["wins"] / entry["games"],
                 "rating": round(entry["rating"], 1),
-                "score": round(_score(entry["rating"], entry["role_games"]), 1),
+                "score": round(_score(entry["rating"], score_games), 1),
                 "peak": round(entry["peak"], 1),
                 "streak": streak if entry["results"][-1] else -streak,
                 "first_played": entry["first"],
                 "last_played": entry["last"],
             }
         )
+        if as_of is not None:
+            rows[-1]["experience"] = {
+                "games": entry["effective_games"],
+                "asOf": entry["last"],
+                "rating": entry["rating"],
+            }
     rows.sort(key=lambda row: (-row["score"], -row["games"], row["name"].lower()))
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
     return rows
 
 
-def build_custom_rankings(cache: dict) -> dict:
+def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
+    as_of = as_of or datetime.now(timezone.utc)
     games_with_ids = sorted(cache["games"].items(), key=lambda item: item[1]["start_time"])
     games = [game for _, game in games_with_ids]
     baseline = fit_baseline(games)
@@ -370,8 +397,11 @@ def build_custom_rankings(cache: dict) -> dict:
         ]
         subset = [game for game, _ in picked]
         subset_details = [detail for _, detail in picked]
+        cutoff = None if period["id"] == "all" else min(
+            as_of, datetime(int(period["id"]), 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+        )
         for role in ROLES:
-            rankings[role][period["id"]] = _build_role(subset, subset_details, role)
+            rankings[role][period["id"]] = _build_role(subset, subset_details, role, cutoff)
         kings_wins = sum(g["kings_won"] for g in subset)
         summary[period["id"]] = {
             "games": len(subset),
@@ -379,8 +409,9 @@ def build_custom_rankings(cache: dict) -> dict:
             "peasants_wins": len(subset) - kings_wins,
         }
 
-    # Score after every game per player and role, in play order: [id, name, score, score change].
+    # Keep undecayed and decayed histories so All time retains its original scores.
     last_score = {role: defaultdict(lambda: _score(START_RATING, 0)) for role in ROLES}
+    last_decayed_score = {role: defaultdict(lambda: _score(START_RATING, 0)) for role in ROLES}
     rosters = []
     for (_, game), detail in zip(games_with_ids, details):
         per_role = {}
@@ -388,13 +419,25 @@ def build_custom_rankings(cache: dict) -> dict:
             rows = []
             for user_id, name, *_ in game[role]:
                 score = _score(detail["deltas"][role][user_id][1], detail["role_games"][role][user_id])
-                rows.append([user_id, name, round(score, 1), round(score - last_score[role][user_id], 1)])
+                decayed_score = _score(detail["deltas"][role][user_id][1], detail["effective_games"][role][user_id])
+                rows.append([
+                    user_id, name, round(score, 1), round(score - last_score[role][user_id], 1),
+                    round(decayed_score, 1), round(decayed_score - last_decayed_score[role][user_id], 1),
+                ])
                 last_score[role][user_id] = score
+                last_decayed_score[role][user_id] = decayed_score
             per_role[role] = rows
         rosters.append(per_role)
 
     return {
-        "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generatedAt": as_of.isoformat(timespec="seconds"),
+        "scoreDecay": {
+            "halfLifeDays": EXPERIENCE_HALF_LIFE_DAYS,
+            "maxGames": SIGMA_FLOOR_GAMES,
+            "sigmaStart": SIGMA_START,
+            "gamesScale": SIGMA_GAMES_SCALE,
+            "scoreK": SCORE_K,
+        },
         "organizers": ORGANIZERS,
         "startRating": START_RATING,
         "model": {"winWeights": [round(w, 4) for w in win_weights], "backtest": backtest, "baseline": [round(w, 4) for w in baseline], "kNew": K_NEW, "kSettled": K_SETTLED, "provisionalGames": PROVISIONAL_GAMES},

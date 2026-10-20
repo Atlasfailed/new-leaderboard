@@ -37,6 +37,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   modeButtons(el.modes, ["Home", "Kings", "Peasants", "Maps", "Games"], state.mode, (mode) => {
     state.mode = mode;
     render();
+    window.setInterval(() => {
+      if (state.mode === "Kings" || state.mode === "Peasants") {
+        renderPlayers();
+      }
+    }, 60000);
   });
   const twitchUrl = new URL("https://player.twitch.tv/");
   twitchUrl.search = new URLSearchParams({
@@ -97,7 +102,8 @@ function render() {
 
 function renderPlayers() {
   const query = el.search.value.trim().toLowerCase();
-  const rows = (state.data.rankings[state.mode.toLowerCase()][state.period] || []).filter(
+  const now = Date.now();
+  const rows = playerRankings(now).filter(
     (row) => !query || row.name.toLowerCase().includes(query)
   ).sort(comparePlayers);
   document.querySelectorAll("#playersWrap th[data-sort]").forEach((header) => {
@@ -121,6 +127,24 @@ function renderPlayers() {
         )
         .join("")
     : emptyRow(10);
+}
+
+function playerRankings(now = Date.now()) {
+  const rows = state.data.rankings[state.mode.toLowerCase()][state.period] || [];
+  if (state.period === "all") {
+    return rows;
+  }
+  const cutoff = Math.min(now, Date.parse(`${state.period}-12-31T23:59:59Z`));
+  const { halfLifeDays, maxGames, sigmaStart, gamesScale, scoreK } = state.data.scoreDecay;
+  return rows.map((row) => {
+    const { games, asOf, rating } = row.experience;
+    const days = Math.max(0, (cutoff - Date.parse(asOf)) / 86400000);
+    const effective = games * 2 ** (-days / halfLifeDays);
+    const score = rating - scoreK * sigmaStart / Math.sqrt(1 + Math.min(effective, maxGames) / gamesScale);
+    return { ...row, score: Math.round(score * 10) / 10 };
+  }).sort((a, b) => b.score - a.score || b.games - a.games
+      || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0))
+    .map((row, i) => ({ ...row, rank: i + 1 }));
 }
 
 function comparePlayers(a, b) {
@@ -287,7 +311,8 @@ function renderPlayerGames() {
     if (!entry) {
       return;
     }
-    const [, , score, change] = entry;
+    const score = entry[state.period === "all" ? 2 : 4];
+    const change = entry[state.period === "all" ? 3 : 5];
     const won = g.winner === role;
     wins += won;
     points.push({ time: g.start_time, score });
