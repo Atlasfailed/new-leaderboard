@@ -137,9 +137,9 @@ function playerRankings(now = Date.now()) {
   const cutoff = Math.min(now, Date.parse(`${state.period}-12-31T23:59:59Z`));
   const { halfLifeDays, maxGames, sigmaStart, gamesScale, scoreK } = state.data.scoreDecay;
   return rows.map((row) => {
-    const { games, asOf, rating } = row.experience;
-    const days = Math.max(0, (cutoff - Date.parse(asOf)) / 86400000);
-    const effective = games * 2 ** (-days / halfLifeDays);
+    const { inherited, games, year, rating } = row.experience;
+    const days = Math.max(0, (cutoff - Date.parse(`${year}-01-01T00:00:00Z`)) / 86400000);
+    const effective = games + inherited * 2 ** (-days / halfLifeDays);
     const score = rating - scoreK * sigmaStart / Math.sqrt(1 + Math.min(effective, maxGames) / gamesScale);
     return { ...row, score: Math.round(score * 10) / 10 };
   }).sort((a, b) => b.score - a.score || b.games - a.games

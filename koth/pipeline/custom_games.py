@@ -294,19 +294,37 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
             for role in ROLES
         }
         effective_games = {role: {} for role in ROLES}
+        year_experience = {role: {} for role in ROLES}
         for role in ROLES:
             for user_id, *_ in game[role]:
-                count, last = experience[role].get(user_id, (0.0, game_time))
-                count = min(SIGMA_FLOOR_GAMES, _decay_games(count, last, game_time) + 1)
-                experience[role][user_id] = (count, game_time)
-                effective_games[role][user_id] = count
-        details.append({"expected": expected, "deltas": deltas, "role_games": role_games, "effective_games": effective_games})
+                inherited, count, year = experience[role].get(user_id, (0.0, 0, game_time.year))
+                if year != game_time.year:
+                    boundary = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+                    inherited = _year_games(inherited, count, year, boundary)
+                    inherited = _decay_games(
+                        inherited, boundary, datetime(game_time.year, 1, 1, tzinfo=timezone.utc)
+                    )
+                    count = 0
+                    year = game_time.year
+                count = min(SIGMA_FLOOR_GAMES, count + 1)
+                experience[role][user_id] = (inherited, count, year)
+                effective_games[role][user_id] = _year_games(inherited, count, year, game_time)
+                year_experience[role][user_id] = {"inherited": inherited, "games": count, "year": year}
+        details.append({
+            "expected": expected, "deltas": deltas, "role_games": role_games,
+            "effective_games": effective_games, "year_experience": year_experience,
+        })
     return details, ratings
 
 
 def _decay_games(games: float, last: datetime, as_of: datetime) -> float:
     days = max(0.0, (as_of - last).total_seconds() / 86400)
     return games * 2 ** (-days / EXPERIENCE_HALF_LIFE_DAYS)
+
+
+def _year_games(inherited: float, games: int, year: int, as_of: datetime) -> float:
+    start = datetime(year, 1, 1, tzinfo=timezone.utc)
+    return min(SIGMA_FLOOR_GAMES, games + _decay_games(inherited, start, as_of))
 
 
 def _sigma(games: float) -> float:
@@ -334,14 +352,15 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
             entry["rating"] = rating_after
             entry["role_games"] = detail["role_games"][role][user_id]
             entry["effective_games"] = detail["effective_games"][role][user_id]
+            entry["year_experience"] = detail["year_experience"][role][user_id]
             score_games = entry["effective_games"] if as_of is not None else entry["role_games"]
             entry["peak"] = max(entry["peak"], _score(rating_after, score_games))
             entry["results"].append(won)
 
     rows = []
     for user_id, entry in stats.items():
-        score_games = entry["role_games"] if as_of is None else _decay_games(
-            entry["effective_games"], _parse_time(entry["last"]), as_of
+        score_games = entry["role_games"] if as_of is None else _year_games(
+            **entry["year_experience"], as_of=as_of
         )
         streak = 0
         for won in reversed(entry["results"]):
@@ -367,8 +386,7 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
         )
         if as_of is not None:
             rows[-1]["experience"] = {
-                "games": entry["effective_games"],
-                "asOf": entry["last"],
+                **entry["year_experience"],
                 "rating": entry["rating"],
             }
     rows.sort(key=lambda row: (-row["score"], -row["games"], row["name"].lower()))

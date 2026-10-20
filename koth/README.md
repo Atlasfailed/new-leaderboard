@@ -15,14 +15,18 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
 - Yearly Kings and Peasants tables include only players active in that year.
   Games, W-L, win rate, streak and Peak Score describe the selected year.
   Elo carries forward unchanged. Yearly Scores use recent effective role
-  experience: between games it halves every 90 days, each game adds one,
-  and the accumulator is capped at 50 before carrying it forward.
+  experience: games in the selected year keep full weight throughout that year.
+  Only experience inherited on 1 January halves every 90 days:
+  `E = min(50, games_this_year + inherited * 2^(-days_since_Jan_1 / 90))`.
+  The capped effective count at year-end becomes next year's inherited
+  experience; skipped years continue to discount the inherited count.
   Completed years freeze the deduction at 31 December 23:59:59 UTC; the
   current year's Scores and ranks keep decaying in the browser (refreshed
   every minute), even without a data rebuild. All time uses cumulative
   role games with no decay and retains its original Scores and history.
   Yearly Peak Score and player history use decayed experience at each game;
-  the table can be lower than the last game Score due to subsequent inactivity.
+  the table can be lower than the last game Score as inherited experience
+  continues to decay. Current-year games never lose weight within that year.
   The latest available year (currently 2026) is selected by default.
   Every player-table column can be sorted in either direction using its header;
   W-L sorts by wins, with fewer losses first when sorting descending.

@@ -49,9 +49,9 @@ function decayedRows(period, now) {
       scoreDecay: {halfLifeDays: 90, maxGames: 50, sigmaStart: 350, gamesScale: 5, scoreK: 2},
       rankings: {kings: Object.fromEntries(["all", "2025", "2026"].map(year => [year, [
         {user_id: 1, name: "A", games: 1, rank: 1, score: 1488.9, peak: 1488.9,
-         experience: {games: 50, asOf: "2025-12-31T23:59:59Z", rating: 1700}},
+         experience: {inherited: 50, games: 1, year: Number(year), rating: 1700}},
         {user_id: 2, name: "B", games: 10, rank: 2, score: 1400, peak: 1400,
-         experience: {games: 10, asOf: "2026-06-01T00:00:00Z", rating: 1800}}
+         experience: {inherited: 0, games: 10, year: Number(year), rating: 1800}}
       ]]))}
     };
   `, context);
@@ -70,15 +70,20 @@ test("completed years freeze at year-end", () => {
 test("current year scores decrease without rebuilding data and ranks update", () => {
   const early = decayedRows("2026", "2026-06-01");
   const late = decayedRows("2026", "2026-12-01");
-  for (const row of late) {
-    assert.ok(row.score < early.find(r => r.user_id === row.user_id).score);
-  }
+  assert.ok(late.find(r => r.user_id === 1).score < early.find(r => r.user_id === 1).score);
+  assert.equal(late.find(r => r.user_id === 2).score, early.find(r => r.user_id === 2).score);
   assert.ok(late.every((row, i) => row.rank === i + 1 && (!i || late[i - 1].score >= row.score)));
 });
 
 test("one half-life halves effective experience exactly", () => {
-  const rows = decayedRows("2026", "2026-03-31T23:59:59Z");
+  const rows = decayedRows("2026", "2026-04-01T00:00:00Z");
   const score = rows.find(r => r.user_id === 1).score;
-  const expected = Math.round((1700 - 700 / Math.sqrt(1 + 25 / 5)) * 10) / 10;
+  const expected = Math.round((1700 - 700 / Math.sqrt(1 + 26 / 5)) * 10) / 10;
   assert.equal(score, expected);
+});
+
+test("current-year games retain full weight at year-end", () => {
+  const row = decayedRows("2026", "2026-12-31T23:59:59Z").find(r => r.user_id === 2);
+  const expected = Math.round((1800 - 700 / Math.sqrt(1 + 10 / 5)) * 10) / 10;
+  assert.equal(row.score, expected);
 });

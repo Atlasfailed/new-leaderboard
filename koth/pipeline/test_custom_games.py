@@ -76,19 +76,20 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(row["games"], 1)
         self.assertEqual(row["score"], round(model._score(details[-1]["deltas"]["kings"][row["user_id"]][1], 50), 1))
 
-    def test_exact_half_life_and_two_year_return(self):
+    def test_exact_half_life(self):
         start = datetime(2024, 1, 1, tzinfo=timezone.utc)
         self.assertEqual(model._decay_games(50, start, start), 50)
         self.assertAlmostEqual(model._decay_games(50, start, start + timedelta(days=model.EXPERIENCE_HALF_LIFE_DAYS)), 25)
         self.assertAlmostEqual(model._decay_games(50, start, start + timedelta(days=4 * model.EXPERIENCE_HALF_LIFE_DAYS)), 3.125)
-        self.assertEqual(round(1700 - model._score(1700, 4.125), 1), 518.2)
+        self.assertEqual(model._year_games(50, 10, 2024, start + timedelta(days=90)), 35)
+        self.assertEqual(model._year_games(50, 10, 2024, start + timedelta(days=180)), 22.5)
 
     def test_experience_caps_before_decay_and_recovery(self):
         games = [game(2024, [1, 2], [3, 4, 5, 6]) for _ in range(100)]
         games.append(game(2026, [1, 2], [3, 4, 5, 6]))
         details, _ = model.run_elo(games, [0, 0, 0])
         self.assertEqual(details[-2]["effective_games"]["kings"][1], 50)
-        gap = model._parse_time(games[-1]["start_time"]) - model._parse_time(games[-2]["start_time"])
+        gap = model._parse_time(games[-1]["start_time"]) - datetime(2025, 1, 1, tzinfo=timezone.utc)
         expected = 50 * 2 ** (-gap.total_seconds() / 86400 / model.EXPERIENCE_HALF_LIFE_DAYS) + 1
         self.assertAlmostEqual(details[-1]["effective_games"]["kings"][1], expected)
         self.assertLess(expected, 4.2)
@@ -111,7 +112,10 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual(next_year["rankings"][role]["2026"], future["rankings"][role]["2026"])
             old = {row["user_id"]: row for row in first["rankings"][role]["2026"]}
             for row in later["rankings"][role]["2026"]:
-                self.assertLess(row["score"], old[row["user_id"]]["score"])
+                if old[row["user_id"]]["experience"]["inherited"] > 0:
+                    self.assertLess(row["score"], old[row["user_id"]]["score"])
+                else:
+                    self.assertEqual(row["score"], old[row["user_id"]]["score"])
                 self.assertEqual(row["rating"], old[row["user_id"]]["rating"])
 
     def test_year_end_score_uses_year_end_cutoff(self):
@@ -120,8 +124,43 @@ class SnapshotTests(unittest.TestCase):
         row = payload["rankings"]["kings"]["2025"][0]
         experience = row["experience"]
         cutoff = datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-        count = model._decay_games(experience["games"], model._parse_time(experience["asOf"]), cutoff)
+        count = model._year_games(experience["inherited"], experience["games"], experience["year"], cutoff)
         self.assertEqual(row["score"], round(model._score(experience["rating"], count), 1))
+
+    def test_current_year_games_keep_full_weight(self):
+        games = [game(2026, [1, 2], [3, 4, 5, 6]), game(2026, [1, 2], [3, 4, 5, 6])]
+        games[0]["start_time"] = "2026-01-01T00:00:00Z"
+        games[1]["start_time"] = "2026-12-01T00:00:00Z"
+        details, _ = model.run_elo(games, [0, 0, 0])
+        self.assertEqual(details[1]["effective_games"]["kings"][1], 2)
+        row = model._build_role(games, details, "kings", datetime(2026, 12, 31, tzinfo=timezone.utc))[0]
+        rating = details[-1]["deltas"]["kings"][row["user_id"]][1]
+        self.assertEqual(row["score"], round(model._score(rating, 2), 1))
+
+    def test_decay_starts_only_at_year_boundary_and_has_no_reset(self):
+        games = [game(2025, [1, 2], [3, 4, 5, 6])]
+        games[0]["start_time"] = "2025-01-01T00:00:00Z"
+        details, _ = model.run_elo(games, [0, 0, 0])
+        state = details[0]["year_experience"]["kings"][1]
+        self.assertEqual(state, {"inherited": 0, "games": 1, "year": 2025})
+        boundary = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        inherited = model._year_games(**state, as_of=boundary)
+        self.assertEqual(inherited, 1)
+        self.assertEqual(model._year_games(inherited, 0, 2026, boundary), 1)
+        self.assertEqual(model._year_games(inherited, 0, 2026, boundary + timedelta(days=90)), 0.5)
+
+    def test_next_year_inherits_capped_prior_year_end_experience(self):
+        games = [game(2024, [1, 2], [3, 4, 5, 6]), game(2025, [1, 2], [3, 4, 5, 6])]
+        games[1]["start_time"] = "2025-04-01T00:00:00Z"
+        details, _ = model.run_elo(games, [0, 0, 0])
+        self.assertEqual(details[1]["year_experience"]["kings"][1]["inherited"], 1)
+        self.assertAlmostEqual(details[1]["effective_games"]["kings"][1], 1.5)
+        games.append(game(2026, [1, 2], [3, 4, 5, 6]))
+        games[-1]["start_time"] = "2026-01-01T00:00:00Z"
+        details, _ = model.run_elo(games, [0, 0, 0])
+        inherited = 1 + 2 ** (-365 / 90)
+        self.assertAlmostEqual(details[-1]["year_experience"]["kings"][1]["inherited"], inherited)
+        self.assertAlmostEqual(details[-1]["effective_games"]["kings"][1], inherited + 1)
 
 
 if __name__ == "__main__":
