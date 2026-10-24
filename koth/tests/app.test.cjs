@@ -87,3 +87,84 @@ test("current-year games retain full weight at year-end", () => {
   const expected = Math.round((1800 - 700 / Math.sqrt(1 + 10 / 5)) * 10) / 10;
   assert.equal(row.score, expected);
 });
+
+test("display scale starts at 16.67 and divides score movements by 42", () => {
+  assert.equal(vm.runInContext("formatScore(800)", context), "16.67");
+  assert.equal(vm.runInContext("formatScore(842)", context), "17.67");
+  assert.equal(vm.runInContext("formatScore(758)", context), "15.67");
+  assert.equal(vm.runInContext("displayScore(842) - displayScore(800)", context), 1);
+});
+
+test("rescaling preserves order across every cached role and period without mutating scores", () => {
+  const data = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8"));
+  context.cachedData = data;
+  const original = JSON.stringify(data);
+  vm.runInContext(`
+    for (const periods of Object.values(cachedData.rankings)) {
+      for (const rows of Object.values(periods)) {
+        const rawOrder = [...rows].sort((a, b) => b.score - a.score || a.rank - b.rank);
+        const scaledOrder = [...rows].sort((a, b) => displayScore(b.score) - displayScore(a.score) || a.rank - b.rank);
+        if (rawOrder.some((row, i) => row.user_id !== scaledOrder[i].user_id)) {
+          throw new Error("Rescaling changed ranking order");
+        }
+      }
+    }
+  `, context);
+  assert.equal(JSON.stringify(data), original);
+});
+
+test("table rescales Score and Peak but sorting retains raw-score precision", () => {
+  const tableContext = vm.createContext({
+    document: { addEventListener() {}, querySelectorAll() { return []; } },
+  });
+  vm.runInContext(source, tableContext);
+  vm.runInContext(`
+    state.mode = "Kings";
+    state.period = "all";
+    state.sort = { key: "score", direction: "descending" };
+    const row = {name: "Player", country: "BE", games: 1, wins: 1, losses: 0,
+      win_rate: 1, streak: 1, last_played: "2026-06-01", peak: 884};
+    state.data = { rankings: { kings: { all: [
+      {...row, user_id: 1, rank: 1, score: 800.1},
+      {...row, user_id: 2, rank: 2, score: 800}
+    ] } } };
+    el.search = {value: ""};
+    el.playerRows = {};
+    renderPlayers();
+  `, tableContext);
+  const html = vm.runInContext("el.playerRows.innerHTML", tableContext);
+  assert.ok(html.indexOf('data-user="1"') < html.indexOf('data-user="2"'));
+  assert.equal((html.match(/<strong>16.67<\/strong>/g) || []).length, 2);
+  assert.ok(html.includes("<td>18.67</td>"));
+  assert.ok(vm.runInContext("comparePlayers({score: 800.1, rank: 2}, {score: 800, rank: 1})", tableContext) < 0);
+});
+
+for (const period of ["all", "2026"]) {
+  test(`player history and chart use scaled scores and changes for ${period}`, () => {
+    const historyContext = vm.createContext({ document: { addEventListener() {} } });
+    vm.runInContext(source, historyContext);
+    historyContext.period = period;
+    vm.runInContext(`
+      state.period = period;
+      state.player = {id: 1, name: "Player"};
+      state.data = {games: [
+        {id: "new", start_time: "2026-06-02", map: "Test", winner: "peasants",
+         kings: [[1, "Player", 842, -42, 884, -84]], peasants: []},
+        {id: "old", start_time: "2026-06-01", map: "Test", winner: "kings",
+         kings: [[1, "Player", 884, 84, 968, 168]], peasants: []}
+      ]};
+      el.playerGamesTitle = {};
+      el.playerGameRows = {};
+      el.playerChart = {};
+      renderPlayerGames();
+    `, historyContext);
+    const html = vm.runInContext("el.playerGameRows.innerHTML", historyContext);
+    const chart = vm.runInContext("el.playerChart.innerHTML", historyContext);
+    const [score, loss, win] = period === "all" ? ["17.67", "-1.00", "+2.00"] : ["18.67", "-2.00", "+4.00"];
+    assert.ok(html.includes(`<td>${score}</td>`));
+    assert.ok(html.includes(`class="delta-down">${loss}`));
+    assert.ok(html.includes(`class="delta-up">${win}`));
+    assert.ok(chart.includes(`: ${score}</title>`));
+    assert.ok(!chart.includes("NaN"));
+  });
+}

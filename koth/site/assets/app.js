@@ -1,5 +1,14 @@
 const state = { data: null, mode: "Home", period: null, map: null, playerRole: "Kings", player: null, sort: { key: "rank", direction: "ascending" } };
 const el = {};
+const SCORE_SCALE = 42;
+
+function displayScore(score) {
+  return 50 / 3 + (score - 800) / SCORE_SCALE;
+}
+
+function formatScore(score) {
+  return displayScore(score).toFixed(2);
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   [
@@ -116,8 +125,8 @@ function renderPlayers() {
           <td>${row.rank}</td>
           <td class="name-cell"><a href="#" data-user="${row.user_id}" data-name="${esc(row.name)}">${esc(row.name)}</a></td>
           <td>${esc(row.country)}</td>
-          <td><strong>${Math.round(row.score)}</strong></td>
-          <td>${Math.round(row.peak)}</td>
+          <td><strong>${formatScore(row.score)}</strong></td>
+          <td>${formatScore(row.peak)}</td>
           <td>${row.games}</td>
           <td>${row.wins}-${row.losses}</td>
           <td>${percent(row.win_rate)}</td>
@@ -312,17 +321,17 @@ function renderPlayerGames() {
       return;
     }
     const score = entry[state.period === "all" ? 2 : 4];
-    const change = entry[state.period === "all" ? 3 : 5];
+    const change = Number((entry[state.period === "all" ? 3 : 5] / SCORE_SCALE).toFixed(2));
     const won = g.winner === role;
     wins += won;
-    points.push({ time: g.start_time, score });
+    points.push({ time: g.start_time, score: displayScore(score) });
     rows.push(`<tr>
       <td>${formatDate(g.start_time)}</td>
       <td>${esc(g.map)}</td>
       <td>${won ? "Win" : "Loss"}</td>
       <td>${g.kings.length} vs ${g.peasants.length}</td>
-      <td>${Math.round(score)}</td>
-      <td class="${change > 0 ? "delta-up" : change < 0 ? "delta-down" : ""}">${change > 0 ? "+" : ""}${change.toFixed(1)}</td>
+      <td>${formatScore(score)}</td>
+      <td class="${change > 0 ? "delta-up" : change < 0 ? "delta-down" : ""}">${change > 0 ? "+" : ""}${change.toFixed(2)}</td>
       <td>${replayLink(g.id)}</td>
     </tr>`);
   });
@@ -337,12 +346,12 @@ function scoreChart(points) {
   }
   const w = 800, h = 180, pad = { l: 44, r: 12, t: 12, b: 22 };
   const scores = points.map((p) => p.score);
-  const lo = Math.floor(Math.min(...scores) / 10) * 10, hi = Math.ceil(Math.max(...scores) / 10) * 10 || lo + 10;
+  const lo = Math.floor(Math.min(...scores)), hi = Math.max(lo + 1, Math.ceil(Math.max(...scores)));
   const x = (i) => pad.l + (i / (points.length - 1)) * (w - pad.l - pad.r);
   const y = (v) => pad.t + (1 - (v - lo) / (hi - lo || 1)) * (h - pad.t - pad.b);
   const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
   const dots = points
-    .map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.score).toFixed(1)}" r="2.5"><title>${formatDate(p.time)}: ${Math.round(p.score)}</title></circle>`)
+    .map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.score).toFixed(1)}" r="2.5"><title>${formatDate(p.time)}: ${p.score.toFixed(2)}</title></circle>`)
     .join("");
   return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Score over time">
     <text x="4" y="${pad.t + 4}">${hi}</text><text x="4" y="${h - pad.b}">${lo}</text>

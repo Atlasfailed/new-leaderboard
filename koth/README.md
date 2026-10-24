@@ -32,6 +32,14 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
   W-L sorts by wins, with fewer losses first when sorting descending.
 - Elo, start 1500, one rating per role. K is 48 for a player's first 8 games in a role, then 24. Everyone on a team gets the same change.
 - Rank is by Score = Elo - 2 x sigma, where sigma = 350 / sqrt(1 + min(experience, 50) / 5). Experience means cumulative role games for All time and the decaying effective count for year views. This is a participation heuristic, not calibrated statistical uncertainty.
+- The website displays Score and Peak Score on a BAR-like scale:
+  `displayed_score = 50/3 + (Score - 800) / 42`, shown to two decimal places.
+  The starting Score of 800 displays as 16.67; game changes are divided by 42
+  without adding the starting offset. Tables, histories and charts all use
+  this display scale. Stored scores, ranking order, sorting, Elo updates and
+  experience decay are unchanged, including tie-breaks before display rounding.
+  This is a cosmetic rescaling, not official BAR OpenSkill or a calibration
+  of per-game changes against BAR.
 - The expected result starts from a logistic fit on bonus and team-size ratio, shifted by the difference of the team average ratings.
 - The Kings win chance on the Games view is a separate logistic fit on bonus, team-size ratio and the mean OpenSkill gap. Its walk-forward backtest accuracy (about 66%) is written to `model.backtest` and shown on the Games view.
 
