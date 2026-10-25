@@ -55,6 +55,11 @@ One-time setup:
 4. Create the Pages project once (Workers & Pages, Create, Pages, Direct Upload, name it `allreasonnologic-koth`), or run `npx wrangler pages project create allreasonnologic-koth --production-branch=main`. The site will be at `https://allreasonnologic-koth.pages.dev`. The name is set in the `--project-name` flag of the workflow.
 
 ## Local use
+Scheduled checks deploy to Cloudflare only when cached game records change.
+New rejected replay IDs or scan metadata alone do not trigger a deployment.
+Pushes and manual runs still deploy even when game data is unchanged, so
+website changes and deliberate redeployments are always published.
+
 
 ```bash
 python -m pip install -r requirements.txt

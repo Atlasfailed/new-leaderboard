@@ -48,6 +48,25 @@ jobs:
       - name: Scan for new games and build data
         run: python -m pipeline.custom_games --output site/data
 
+      - name: Check for changed game data
+        id: game-data
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          previous = json.loads(subprocess.check_output(
+              ["git", "show", "HEAD:koth/pipeline/reference/custom_games.json"], text=True
+          ))
+          current = json.loads(Path("pipeline/reference/custom_games.json").read_text())
+          changed = previous["games"] != current["games"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"changed={str(changed).lower()}\n")
+          print(f"Game data changed: {changed}")
+          PY
+
       - name: Commit updated replay cache
         run: |
           if git diff --quiet -- pipeline/reference/custom_games.json; then
@@ -62,6 +81,7 @@ jobs:
           git push
 
       - name: Deploy to Cloudflare Pages
+        if: github.event_name != 'schedule' || steps.game-data.outputs.changed == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           workingDirectory: koth
