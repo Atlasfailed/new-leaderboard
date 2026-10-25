@@ -8,8 +8,8 @@ on:
       - "koth/**"
       - ".github/workflows/koth-update-and-deploy.yml"
   schedule:
-    # Run every 5 minutes from 11:00 through 16:00 Central European local time.
-    - cron: "*/5 11-15 * * 0"
+    # Run every 20 minutes from 11:00 through 16:00 Central European local time.
+    - cron: "*/20 11-15 * * 0"
       timezone: "Europe/Brussels"
     - cron: "0 16 * * 0"
       timezone: "Europe/Brussels"
