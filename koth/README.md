@@ -45,7 +45,7 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
 
 ## Automatic updates
 
-`.github/workflows/koth-update-and-deploy.yml` (in the repo root) runs every Monday 05:00 UTC, on every push to `main` and manually. It scans for new games, rebuilds `site/data/rankings.json`, commits the replay cache if it changed, and deploys to Cloudflare Pages.
+`.github/workflows/koth-update-and-deploy.yml` (in the repo root) is scheduled every Sunday every 5 minutes from 11:00 through 16:00 inclusive in `Europe/Brussels` (CET in winter, CEST in summer), on every push to `main` affecting KOTH files or the workflow, and manually. GitHub Actions scheduled runs can be delayed during busy periods. It scans for new games, rebuilds `site/data/rankings.json`, commits the replay cache if it changed, and deploys to Cloudflare Pages.
 
 One-time setup:
 
