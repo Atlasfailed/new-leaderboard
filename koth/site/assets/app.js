@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   [
     "updated", "error", "modes", "toolbar", "homeWrap", "period", "search", "playersWrap", "playerRows", "playerChart", "mapsWrap", "mapRows",
     "chartTitle", "scatter", "bands", "gamesWrap", "gameRows", "playerGames", "playerGamesTitle", "playerGameModes",
-    "playerGameRows", "playerGamesClose",
+    "playerGameRows", "playerGamesClose", "gameDaysWrap", "gameDayRows",
   ].forEach((id) => (el[id] = document.getElementById(id)));
   try {
     const response = await fetch("data/rankings.json");
@@ -43,7 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       renderPlayers();
     });
   });
-  modeButtons(el.modes, ["Home", "Kings", "Peasants", "Maps", "Games"], state.mode, (mode) => {
+  modeButtons(el.modes, ["Home", "Kings", "Peasants", "Maps", "Games", "Game days"], state.mode, (mode) => {
     state.mode = mode;
     render();
     window.setInterval(() => {
@@ -100,10 +100,14 @@ function render() {
   el.playersWrap.hidden = mode !== "Kings" && mode !== "Peasants";
   el.mapsWrap.hidden = mode !== "Maps";
   el.gamesWrap.hidden = mode !== "Games";
+  el.gameDaysWrap.hidden = mode !== "Game days";
+  el.search.placeholder = mode === "Game days" ? "Date, player or map" : "Player or map";
   if (mode === "Maps") {
     renderMaps();
   } else if (mode === "Games") {
     renderGames();
+  } else if (mode === "Game days") {
+    renderGameDays();
   } else if (mode === "Kings" || mode === "Peasants") {
     renderPlayers();
   }
@@ -208,6 +212,118 @@ function renderGames() {
         )
         .join("")
     : emptyRow(9);
+}
+
+const SYDNEY_TIME_ZONE = "Australia/Sydney";
+const LONG_BREAK_MINUTES = 45;
+const sydneyPartsFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: SYDNEY_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+});
+
+function sydneyGameTime(value) {
+  const parts = Object.fromEntries(sydneyPartsFormatter.formatToParts(new Date(value)).map(p => [p.type, p.value]));
+  const date = `${parts.year}-${parts.month}-${parts.day}`;
+  const hour = Number(parts.hour);
+  const day = hour < 12
+    ? new Date(Date.parse(`${date}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)
+    : date;
+  return {
+    day,
+    minute: (hour < 12 ? 1440 : 0) + hour * 60 + Number(parts.minute) + Number(parts.second) / 60,
+  };
+}
+
+function gameDayClock(minute) {
+  const total = Math.floor(minute);
+  const hour = Math.floor(total / 60) % 24;
+  return `${String(hour).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}${total >= 1440 ? " (+1d)" : ""}`;
+}
+
+function gameDaySessions(games, period, query = "") {
+  const grouped = new Map();
+  for (const game of games) {
+    const { day, minute } = sydneyGameTime(game.start_time);
+    if (period !== "all" && !day.startsWith(period)) continue;
+    if (!grouped.has(day)) grouped.set(day, []);
+    grouped.get(day).push({ ...game, startMinute: minute, endMinute: minute + game.duration_ms / 60000 });
+  }
+  const search = query.trim().toLowerCase();
+  return [...grouped].sort(([a], [b]) => b.localeCompare(a)).map(([day, rows]) => {
+    rows.sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time) || a.id.localeCompare(b.id));
+    const breaks = [];
+    let occupiedEnd = rows[0].endMinute;
+    for (const game of rows.slice(1)) {
+      if (game.startMinute - occupiedEnd >= LONG_BREAK_MINUTES) {
+        breaks.push({ startMinute: occupiedEnd, endMinute: game.startMinute });
+      }
+      occupiedEnd = Math.max(occupiedEnd, game.endMinute);
+    }
+    return {
+      day, games: rows, breaks, startMinute: rows[0].startMinute, endMinute: occupiedEnd,
+    };
+  }).filter(session => !search || session.day.includes(search) || session.games.some(game =>
+    game.map.toLowerCase().includes(search)
+    || [...game.kings, ...game.peasants].some(([, name]) => name.toLowerCase().includes(search))
+  ));
+}
+
+function renderGameDays() {
+  const sessions = gameDaySessions(state.data.games, state.period, el.search.value);
+  if (!sessions.length) {
+    el.gameDayRows.innerHTML = '<p class="empty">No results</p>';
+    return;
+  }
+  const start = Math.floor(Math.min(...sessions.map(s => s.startMinute)) / 60) * 60;
+  const end = Math.ceil(Math.max(...sessions.map(s => s.endMinute)) / 60) * 60;
+  const span = Math.max(60, end - start);
+  const position = minute => (minute - start) / span * 100;
+  const width = (from, to) => (to - from) / span * 100;
+  const ticks = [];
+  for (let minute = start; minute <= start + span; minute += 60) {
+    ticks.push(`<span style="left:${position(minute)}%">${gameDayClock(minute)}</span>`);
+  }
+  el.gameDayRows.innerHTML = sessions.map(session => {
+    const bars = session.games.map((game, i) => {
+      const winner = game.winner === "kings" ? "Kings" : "Peasants";
+      const label = `${gameDayClock(game.startMinute)} - ${gameDayClock(game.endMinute)}: ${game.map}, ${minutes(game.duration_ms)}, ${winner} won`;
+      const attributes = `class="day-game day-game-${game.winner === "kings" ? "kings" : "peasants"}"
+        style="left:${position(game.startMinute)}%;width:${width(game.startMinute, game.endMinute)}%"
+        title="${esc(label)}" aria-label="${esc(label)}"`;
+      const localOnly = game.source?.type === "local" && !game.source.api_available;
+      return localOnly
+        ? `<span ${attributes} tabindex="0">${i + 1}. ${esc(game.map)}</span>`
+        : `<a ${attributes} href="https://www.bar-rts.com/replays/${esc(game.id)}" target="_blank" rel="noopener">${i + 1}. ${esc(game.map)}</a>`;
+    }).join("");
+    const breaks = session.breaks.map(gap => {
+      const label = `Break: ${gameDayClock(gap.startMinute)} - ${gameDayClock(gap.endMinute)} (${Math.round(gap.endMinute - gap.startMinute)} min). May include other activity.`;
+      return `<span class="day-break" style="left:${position(gap.startMinute)}%;width:${width(gap.startMinute, gap.endMinute)}%"
+        tabindex="0" title="${esc(label)}" aria-label="${esc(label)}">Break</span>`;
+    }).join("");
+    return `<article class="game-day-card">
+      <header class="game-day-heading">
+        <h3>${esc(session.day)}</h3>
+        <span class="muted">${session.games.length} games · ${gameDayClock(session.startMinute)} - ${gameDayClock(session.endMinute)}</span>
+      </header>
+      <div class="day-timeline-scroll" tabindex="0" aria-label="${esc(session.day)} Sydney game timeline">
+        <div class="day-timeline">
+          <div class="day-axis">${ticks.join("")}</div>
+          <div class="day-track">${breaks}${bars}</div>
+        </div>
+      </div>
+      <details class="day-details"><summary>Game details</summary>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Start (Sydney)</th><th>Map</th><th>Teams</th><th>Winner</th><th>Length</th><th>Replay</th></tr></thead>
+          <tbody>${session.games.map(game => `<tr>
+            <td>${gameDayClock(game.startMinute)}</td><td>${esc(game.map)}</td>
+            <td>${game.kings.length} vs ${game.peasants.length}</td>
+            <td>${game.winner === "kings" ? "Kings" : "Peasants"}</td>
+            <td>${minutes(game.duration_ms)}</td><td>${replayLink(game)}</td>
+          </tr>`).join("")}</tbody>
+        </table></div>
+      </details>
+    </article>`;
+  }).join("");
 }
 
 const SCATTER = { width: 360, height: 260, left: 56, right: 12, top: 10, bottom: 34 };

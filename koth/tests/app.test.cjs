@@ -360,3 +360,107 @@ test("Games and player histories leave missing replay cells empty", () => {
     assert.ok(!html.includes("/replays/local"));
   }
 });
+
+function dayGame(id, start, duration = 20, extra = {}) {
+  return {
+    id, start_time: start, duration_ms: duration * 60000, map: "Test map",
+    winner: "kings", kings: [[1, "Alice"]], peasants: [[2, "Bob"]], ...extra,
+  };
+}
+
+function daySessions(games, period = "all", query = "") {
+  context.dayGames = games;
+  context.dayPeriod = period;
+  context.dayQuery = query;
+  return JSON.parse(vm.runInContext("JSON.stringify(gameDaySessions(dayGames, dayPeriod, dayQuery))", context));
+}
+
+test("Game days use Sydney seasonal time and group after midnight with the previous evening", () => {
+  const rows = daySessions([
+    dayGame("summer", "2026-01-04T10:00:00Z"),
+    dayGame("winter", "2026-07-05T11:00:00Z"),
+    dayGame("after-midnight", "2026-01-04T13:15:00Z"),
+  ]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].day, "2026-07-05");
+  assert.equal(rows[0].startMinute, 1260);
+  assert.equal(rows[1].startMinute, 1260);
+  assert.equal(rows[1].games[1].startMinute, 1455);
+  assert.equal(vm.runInContext("gameDayClock(1455)", context), "00:15 (+1d)");
+});
+
+test("Game days year filtering uses the Sydney session year, not the UTC year", () => {
+  const games = [
+    dayGame("jan", "2025-12-31T14:00:00Z"),
+    dayGame("new-evening", "2026-01-01T10:00:00Z"),
+  ];
+  assert.deepEqual(daySessions(games, "2025").map(s => s.day), ["2025-12-31"]);
+  assert.deepEqual(daySessions(games, "2026").map(s => s.day), ["2026-01-01"]);
+});
+
+test("Game days shade breaks at exactly 45 minutes but not ordinary turnaround", () => {
+  const session = daySessions([
+    dayGame("one", "2026-01-04T10:00:00Z"),
+    dayGame("two", "2026-01-04T10:30:00Z"),
+    dayGame("three", "2026-01-04T11:35:00Z"),
+  ])[0];
+  assert.equal(session.breaks.length, 1);
+  assert.equal(session.breaks[0].endMinute - session.breaks[0].startMinute, 45);
+});
+
+test("Game days merge overlapping occupied intervals before calculating breaks", () => {
+  const session = daySessions([
+    dayGame("long", "2026-01-04T10:00:00Z", 120),
+    dayGame("short-overlap", "2026-01-04T10:10:00Z", 20),
+    dayGame("next", "2026-01-04T12:15:00Z", 20),
+  ])[0];
+  assert.equal(session.breaks.length, 0);
+});
+
+test("Game days search by date, map or player retains every game of the matching session", () => {
+  const games = [
+    dayGame("one", "2026-01-04T10:00:00Z", 20, {map: "Throne"}),
+    dayGame("two", "2026-01-04T11:00:00Z", 20, {map: "Claymore", kings: [[3, "Twig"]]}),
+    dayGame("other", "2026-01-11T10:00:00Z"),
+  ];
+  for (const query of ["2026-01-04", "THRONE", "twig"]) {
+    const sessions = daySessions(games, "all", query);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].games.length, 2);
+  }
+  assert.equal(daySessions(games, "all", "not present").length, 0);
+});
+
+test("Game days include every published game exactly once without mutating the source", () => {
+  const games = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8")).games;
+  const before = JSON.stringify(games);
+  const sessions = daySessions(games);
+  assert.equal(sessions.reduce((sum, s) => sum + s.games.length, 0), games.length);
+  assert.equal(new Set(sessions.flatMap(s => s.games.map(g => g.id))).size, games.length);
+  assert.equal(JSON.stringify(games), before);
+});
+
+test("Game days rendering escapes map names, respects local-only replays, and handles empty results", () => {
+  context.dayGames = [
+    dayGame("api", "2026-01-04T10:00:00Z", 20, {map: "<b>Map</b>"}),
+    dayGame("local", "2026-01-04T10:50:00Z", 20,
+      {winner: "peasants", source: {type: "local", api_available: false}}),
+  ];
+  vm.runInContext(`
+    state.data = {games: dayGames}; state.period = "all";
+    el.search = {value: ""}; el.gameDayRows = {};
+    renderGameDays();
+  `, context);
+  const html = vm.runInContext("el.gameDayRows.innerHTML", context);
+  assert.ok(html.includes("&lt;b&gt;Map&lt;/b&gt;"));
+  assert.ok(!html.includes("<b>Map</b>"));
+  assert.ok(html.includes("/replays/api"));
+  assert.ok(!html.includes("/replays/local"));
+  assert.ok(html.includes("day-game-kings"));
+  assert.ok(html.includes("day-game-peasants"));
+  assert.ok(html.includes('tabindex="0"'));
+  assert.ok(html.includes("<summary>Game details</summary>"));
+  assert.ok(!html.includes('class="day-break"'));
+  vm.runInContext('el.search.value = "not present"; renderGameDays();', context);
+  assert.ok(vm.runInContext("el.gameDayRows.innerHTML", context).includes("No results"));
+});

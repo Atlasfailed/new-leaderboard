@@ -2,6 +2,18 @@
 
 A Cloudflare Pages site for the AllReasonNoLogic community, with channel links and embeds for the latest YouTube uploads and Twitch channel, as well as Sunday King of the Hill leaderboards for Beyond All Reason. The KOTH views are Kings, Peasants, Maps (win rate per map, setup scatter and win rate by team-size ratio) and Games (every game with a Kings win chance and replay link).
 
+Game days shows the published leaderboard games as daily timelines in
+Australia/Sydney time (AEST/AEDT), newest first, with Kings/Peasants win colours.
+Sessions run noon-to-noon so after-midnight games remain with the preceding
+evening (`+1d`). The year selector uses the session date; date, map and player
+searches retain the complete matching day. Only breaks of at least 45 minutes
+are shaded, neutrally as breaks rather than evidence of missing games; shorter
+intervals are left blank. Ends are estimated from start plus recorded duration,
+not verified wall-clock finish times. Short/rejected games outside the published
+leaderboard are not added. Expand each day's details for start times, maps,
+teams, results and available replay links. This view uses the existing live
+rankings data, not a manually embedded analysis snapshot.
+
 The YouTube embed uses the channel's uploads playlist, which lists the newest upload first. The Twitch player loads the channel and uses the current site hostname as its required `parent` parameter; streams appear in the player when the channel is live.
 
 ## How games are found
