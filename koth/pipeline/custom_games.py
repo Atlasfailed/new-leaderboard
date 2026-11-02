@@ -40,8 +40,8 @@ PROVISIONAL_GAMES = 8
 # Ranking score is a conservative estimate: Elo minus SCORE_K x uncertainty.
 # Uncertainty starts at SIGMA_START and shrinks with games played.
 SIGMA_START = 350.0
-SIGMA_GAMES_SCALE = 3.0
-SIGMA_FLOOR_GAMES = 30
+SIGMA_GAMES_SCALE = {"kings": 3.0, "peasants": 5.0}
+SIGMA_FLOOR_GAMES = {"kings": 30, "peasants": 50}
 SCORE_K = 2.0
 EXPERIENCE_HALF_LIFE_DAYS = 90.0
 CACHE_PATH = REFERENCE_DIR / "custom_games.json"
@@ -301,16 +301,16 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
                 inherited, count, year = experience[role].get(user_id, (0.0, 0, game_time.year))
                 if year != game_time.year:
                     boundary = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-                    inherited = _year_games(inherited, count, year, boundary)
+                    inherited = _year_games(inherited, count, year, boundary, role)
                     inherited = _decay_games(
                         inherited, boundary, datetime(game_time.year, 1, 1, tzinfo=timezone.utc)
                     )
                     count = 0
                     year = game_time.year
-                effective_games_before[role][user_id] = _year_games(inherited, count, year, game_time)
-                count = min(SIGMA_FLOOR_GAMES, count + 1)
+                effective_games_before[role][user_id] = _year_games(inherited, count, year, game_time, role)
+                count = min(SIGMA_FLOOR_GAMES[role], count + 1)
                 experience[role][user_id] = (inherited, count, year)
-                effective_games[role][user_id] = _year_games(inherited, count, year, game_time)
+                effective_games[role][user_id] = _year_games(inherited, count, year, game_time, role)
                 year_experience[role][user_id] = {"inherited": inherited, "games": count, "year": year}
         details.append({
             "expected": expected, "deltas": deltas, "role_games": role_games,
@@ -325,17 +325,17 @@ def _decay_games(games: float, last: datetime, as_of: datetime) -> float:
     return games * 2 ** (-days / EXPERIENCE_HALF_LIFE_DAYS)
 
 
-def _year_games(inherited: float, games: int, year: int, as_of: datetime) -> float:
+def _year_games(inherited: float, games: int, year: int, as_of: datetime, role: str) -> float:
     start = datetime(year, 1, 1, tzinfo=timezone.utc)
-    return min(SIGMA_FLOOR_GAMES, games + _decay_games(inherited, start, as_of))
+    return min(SIGMA_FLOOR_GAMES[role], games + _decay_games(inherited, start, as_of))
 
 
-def _sigma(games: float) -> float:
-    return SIGMA_START / math.sqrt(1 + min(games, SIGMA_FLOOR_GAMES) / SIGMA_GAMES_SCALE)
+def _sigma(games: float, role: str) -> float:
+    return SIGMA_START / math.sqrt(1 + min(games, SIGMA_FLOOR_GAMES[role]) / SIGMA_GAMES_SCALE[role])
 
 
-def _score(rating: float, games: float) -> float:
-    return rating - SCORE_K * _sigma(games)
+def _score(rating: float, games: float, role: str) -> float:
+    return rating - SCORE_K * _sigma(games, role)
 
 
 def _build_role(games: list[dict], details: list[dict], role: str, as_of: datetime | None = None) -> list[dict]:
@@ -357,13 +357,13 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
             entry["effective_games"] = detail["effective_games"][role][user_id]
             entry["year_experience"] = detail["year_experience"][role][user_id]
             score_games = entry["effective_games"] if as_of is not None else entry["role_games"]
-            entry["peak"] = max(entry["peak"], _score(rating_after, score_games))
+            entry["peak"] = max(entry["peak"], _score(rating_after, score_games, role))
             entry["results"].append(won)
 
     rows = []
     for user_id, entry in stats.items():
         score_games = entry["role_games"] if as_of is None else _year_games(
-            **entry["year_experience"], as_of=as_of
+            **entry["year_experience"], as_of=as_of, role=role
         )
         streak = 0
         for won in reversed(entry["results"]):
@@ -380,7 +380,7 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
                 "losses": entry["games"] - entry["wins"],
                 "win_rate": entry["wins"] / entry["games"],
                 "rating": round(entry["rating"], 1),
-                "score": round(_score(entry["rating"], score_games), 1),
+                "score": round(_score(entry["rating"], score_games, role), 1),
                 "peak": round(entry["peak"], 1),
                 "streak": streak if entry["results"][-1] else -streak,
                 "first_played": entry["first"],
@@ -431,17 +431,17 @@ def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
         }
 
     # Keep undecayed and decayed histories so All time retains its original scores.
-    last_score = {role: defaultdict(lambda: _score(START_RATING, 0)) for role in ROLES}
+    last_score = {role: defaultdict(lambda role=role: _score(START_RATING, 0, role)) for role in ROLES}
     rosters = []
     for (_, game), detail in zip(games_with_ids, details):
         per_role = {}
         for role in ROLES:
             rows = []
             for user_id, name, *_ in game[role]:
-                score = _score(detail["deltas"][role][user_id][1], detail["role_games"][role][user_id])
-                decayed_score = _score(detail["deltas"][role][user_id][1], detail["effective_games"][role][user_id])
+                score = _score(detail["deltas"][role][user_id][1], detail["role_games"][role][user_id], role)
+                decayed_score = _score(detail["deltas"][role][user_id][1], detail["effective_games"][role][user_id], role)
                 delta, rating = detail["deltas"][role][user_id]
-                score_before = _score(rating - delta, detail["effective_games_before"][role][user_id])
+                score_before = _score(rating - delta, detail["effective_games_before"][role][user_id], role)
                 rows.append([
                     user_id, name, round(score, 1), round(score - last_score[role][user_id], 1),
                     round(decayed_score, 1), round(decayed_score - score_before, 1),

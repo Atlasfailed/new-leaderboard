@@ -46,7 +46,8 @@ function decayedRows(period, now) {
     state.mode = "Kings";
     state.period = period;
     state.data = {
-      scoreDecay: {halfLifeDays: 90, maxGames: 30, sigmaStart: 350, gamesScale: 3, scoreK: 2},
+      scoreDecay: {halfLifeDays: 90, maxGames: {kings: 30, peasants: 50},
+        sigmaStart: 350, gamesScale: {kings: 3, peasants: 5}, scoreK: 2},
       rankings: {kings: Object.fromEntries(["all", "2025", "2026"].map(year => [year, [
         {user_id: 1, name: "A", games: 1, rank: 1, score: 1488.9, peak: 1488.9,
          experience: {inherited: 30, games: 1, year: Number(year), rating: 1700}},
@@ -227,4 +228,47 @@ test("browser scoring settles at thirty effective games using the published poli
   assert.equal(score(30), score(31));
   assert.equal(score(30), score(50));
   assert.equal(score(30), Math.round((1500 - 700 / Math.sqrt(11)) * 10) / 10);
+});
+
+test("Peasants keep gaining participation beyond thirty and settle at fifty", () => {
+  decayedRows("2026", "2026-01-01");
+  const rows = vm.runInContext(`
+    state.mode = "Peasants";
+    state.data.rankings.peasants = {"2026": [29, 30, 31, 49, 50, 51].map(games => ({
+      user_id: games, name: String(games), games,
+      experience: {inherited: 0, games, year: 2026, rating: 1500}
+    }))};
+    playerRankings(Date.parse("2026-06-01"));
+  `, context);
+  for (const row of rows) {
+    assert.equal(row.score, Math.round((1500 - 700 / Math.sqrt(1 + Math.min(row.games, 50) / 5)) * 10) / 10);
+  }
+  const score = games => rows.find(row => row.user_id === games).score;
+  assert.ok(score(30) < score(31));
+  assert.ok(score(49) < score(50));
+  assert.equal(score(50), score(51));
+});
+
+test("browser scores match rebuilt pipeline scores for both roles and every year", () => {
+  const data = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8"));
+  context.rebuiltData = data;
+  const comparisons = vm.runInContext(`(() => {
+    state.data = rebuiltData;
+    const comparisons = [];
+    for (const role of ["kings", "peasants"]) {
+      state.mode = role === "kings" ? "Kings" : "Peasants";
+      for (const period of state.data.periods.filter(p => p.id !== "all")) {
+        state.period = period.id;
+        const actual = playerRankings(Date.parse(state.data.generatedAt));
+        for (const row of state.data.rankings[role][period.id]) {
+          comparisons.push([actual.find(r => r.user_id === row.user_id).score, row.score]);
+        }
+      }
+    }
+    return comparisons;
+  })()`, context);
+  assert.ok(comparisons.length > 0);
+  for (const [actual, expected] of comparisons) {
+    assert.equal(actual, expected);
+  }
 });
