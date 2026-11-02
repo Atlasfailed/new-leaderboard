@@ -330,7 +330,6 @@ select {
 select:hover { border-color: var(--primary); }
 select option { background: var(--surface-strong); color: var(--ink); }
 #leaderboardMap { max-width: min(320px, calc(100vw - 48px)); text-overflow: ellipsis; }
-#mapRatingNote { margin: 12px 0; font-size: 0.85rem; }
 
 .muted {
   color: var(--muted);

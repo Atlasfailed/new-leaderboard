@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     "updated", "error", "modes", "toolbar", "homeWrap", "period", "search", "playersWrap", "playerRows", "playerChart", "mapsWrap", "mapRows",
     "chartTitle", "scatter", "bands", "gamesWrap", "gameRows", "playerGames", "playerGamesTitle", "playerGameModes",
     "playerGameRows", "playerGamesClose", "gameDaysWrap", "gameDayRows",
-    "leaderboardMap", "leaderboardMapLabel", "mapRatingNote",
+    "leaderboardMap", "leaderboardMapLabel",
   ].forEach((id) => (el[id] = document.getElementById(id)));
   try {
     const response = await fetch("data/rankings.json", { cache: "no-cache" });
@@ -108,16 +108,12 @@ function render() {
   el.gameDaysWrap.hidden = mode !== "Game days";
   const isPlayers = mode === "Kings" || mode === "Peasants";
   el.leaderboardMapLabel.hidden = !isPlayers;
-  el.mapRatingNote.hidden = !isPlayers || !state.ratingMap;
   if (isPlayers) {
     const maps = Object.keys(state.data.mapRankings).sort((a, b) => a.localeCompare(b));
     el.leaderboardMap.innerHTML = '<option value="">All maps</option>' + maps.map(map =>
       `<option value="${esc(map)}">${esc(map)} (${state.data.mapRankings[map].summary[state.period].games})</option>`
     ).join("");
     el.leaderboardMap.value = state.ratingMap || "";
-    el.mapRatingNote.textContent = state.ratingMap
-      ? `${state.ratingMap}: independent ratings and player histories across all versions of this map.`
-      : "";
   }
   el.search.placeholder = isPlayers ? "Player name" : mode === "Maps" ? "Map name"
     : mode === "Game days" ? "Date, player or map" : "Player or map";
