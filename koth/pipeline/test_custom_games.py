@@ -26,6 +26,63 @@ class SnapshotTests(unittest.TestCase):
         ]
         self.details, _ = model.run_elo(self.games, [0, 0, 0])
 
+    def test_map_ratings_match_an_isolated_rating_run_and_do_not_mutate_cache(self):
+        from copy import deepcopy
+
+        games = deepcopy(self.games)
+        games[0]["map"] = "Claymore 3"
+        games[2]["map"] = "Claymore 3.0.4"
+        games[1]["map"] = "Other"
+        games[1]["kings"].append([99, "Other only", "AU", 20])
+        cache = {"games": {str(i): g for i, g in enumerate(games)}}
+        before = deepcopy(cache)
+        cutoff = datetime(2026, 11, 1, tzinfo=timezone.utc)
+        baseline = model.fit_baseline(games)
+        payload = model.build_custom_rankings(cache, cutoff)
+        for name, scope in payload["mapRankings"].items():
+            subset = [g for g in games if model.leaderboard_map(g["map"]) == name]
+            details, _ = model.run_elo(subset, baseline)
+            for role in model.ROLES:
+                self.assertEqual(scope["rankings"][role]["all"], model._build_role(subset, details, role))
+            self.assertTrue(all(model.leaderboard_map(g["map"]) == name for g in scope["games"]))
+        self.assertEqual(set(payload["mapRankings"]), {"Claymore"})
+        test = payload["mapRankings"]["Claymore"]
+        self.assertNotIn(99, {r["user_id"] for r in test["rankings"]["kings"]["all"]})
+        self.assertEqual(test["rankings"]["kings"]["2025"], [])
+        self.assertEqual(test["summary"]["all"]["games"], 2)
+        self.assertEqual(test["rankings"]["kings"]["2026"][0]["experience"]["games"], 1)
+        self.assertEqual(cache, before)
+
+    def test_map_histories_and_annual_carryover_use_map_only_experience(self):
+        from copy import deepcopy
+
+        games = deepcopy(self.games)
+        games[1]["map"] = "Throne_V8"
+        payload = model.build_custom_rankings(
+            {"games": {str(i): g for i, g in enumerate(games)}},
+            datetime(2026, 11, 1, tzinfo=timezone.utc),
+        )
+        scope = payload["mapRankings"]["Throne"]
+        self.assertEqual(len(scope["games"]), 1)
+        entry = scope["games"][0]["kings"][0]
+        self.assertEqual(entry[3], round(entry[2] - 800, 1))
+        annual = next(r for r in scope["rankings"]["kings"]["2025"] if r["user_id"] == entry[0])
+        self.assertEqual(annual["starting_score"], 800)
+        self.assertEqual(annual["experience"]["inherited"], 0)
+        self.assertEqual(annual["experience"]["games"], 1)
+        self.assertNotEqual(entry[2], payload["games"][1]["kings"][0][2])
+
+    def test_leaderboard_map_merges_versions_and_excludes_other_maps(self):
+        for name, expected in (
+            ("Claymore 3", "Claymore"), ("Claymore 3.0.4", "Claymore"),
+            ("Claymore v4.1", "Claymore"), ("Raptor_Crater_V2", "Raptor Crater"),
+            ("Raptor Crater v3.2", "Raptor Crater"), ("Throne_V8", "Throne"),
+            ("Throne v9.1", "Throne"), ("Krakatoa_V2.0", None),
+            ("Claymore Remake 1", None), ("Throne Other", None),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(model.leaderboard_map(name), expected)
+
     def test_api_duration_must_be_strictly_longer_than_ten_minutes(self):
         replay = {
             "startTime": "2026-06-01T12:00:00Z",

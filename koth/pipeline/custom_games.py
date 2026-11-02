@@ -402,6 +402,14 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
     return rows
 
 
+def leaderboard_map(name: str) -> str | None:
+    normalized = re.sub(r"[_\s]+", " ", name.strip()).lower()
+    match = re.fullmatch(r"(claymore|raptor crater|throne)(?:\s+v?\d+(?:\.\d+)*)?", normalized)
+    if match is None:
+        return None
+    return {"claymore": "Claymore", "raptor crater": "Raptor Crater", "throne": "Throne"}[match[1]]
+
+
 def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
     as_of = as_of or datetime.now(timezone.utc)
     games_with_ids = sorted(
@@ -411,11 +419,42 @@ def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
     )
     games = [game for _, game in games_with_ids]
     baseline = fit_baseline(games)
-    details, _ = run_elo(games, baseline)
     win_weights, backtest = fit_win_model(games)
     years = sorted({game["start_time"][:4] for game in games}, reverse=True)
     periods = [{"id": "all", "label": "All time"}] + [{"id": year, "label": year} for year in years]
+    overall = _build_rating_scope(games_with_ids, baseline, win_weights, periods, as_of)
+    map_games = defaultdict(list)
+    for item in games_with_ids:
+        name = leaderboard_map(item[1]["map"])
+        if name is not None:
+            map_games[name].append(item)
+    return {
+        "generatedAt": as_of.isoformat(timespec="seconds"),
+        "scoreDecay": {
+            "halfLifeDays": EXPERIENCE_HALF_LIFE_DAYS,
+            "maxGames": SIGMA_FLOOR_GAMES,
+            "sigmaStart": SIGMA_START,
+            "gamesScale": SIGMA_GAMES_SCALE,
+            "scoreK": SCORE_K,
+        },
+        "organizers": ORGANIZERS,
+        "startRating": START_RATING,
+        "model": {"winWeights": [round(w, 4) for w in win_weights], "backtest": backtest, "baseline": [round(w, 4) for w in baseline], "kNew": K_NEW, "kSettled": K_SETTLED, "provisionalGames": PROVISIONAL_GAMES},
+        "periods": periods,
+        **overall,
+        "mapRankings": {
+            name: _build_rating_scope(subset, baseline, win_weights, periods, as_of)
+            for name, subset in sorted(map_games.items())
+        },
+    }
 
+
+def _build_rating_scope(
+    games_with_ids: list[tuple[str, dict]], baseline: list[float], win_weights: list[float],
+    periods: list[dict], as_of: datetime,
+) -> dict:
+    games = [game for _, game in games_with_ids]
+    details, _ = run_elo(games, baseline)
     rankings = {role: {} for role in ROLES}
     summary = {}
     for period in periods:
@@ -460,18 +499,6 @@ def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
         rosters.append(per_role)
 
     return {
-        "generatedAt": as_of.isoformat(timespec="seconds"),
-        "scoreDecay": {
-            "halfLifeDays": EXPERIENCE_HALF_LIFE_DAYS,
-            "maxGames": SIGMA_FLOOR_GAMES,
-            "sigmaStart": SIGMA_START,
-            "gamesScale": SIGMA_GAMES_SCALE,
-            "scoreK": SCORE_K,
-        },
-        "organizers": ORGANIZERS,
-        "startRating": START_RATING,
-        "model": {"winWeights": [round(w, 4) for w in win_weights], "backtest": backtest, "baseline": [round(w, 4) for w in baseline], "kNew": K_NEW, "kSettled": K_SETTLED, "provisionalGames": PROVISIONAL_GAMES},
-        "periods": periods,
         "summary": summary,
         "rankings": rankings,
         "games": [

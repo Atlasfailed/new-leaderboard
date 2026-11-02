@@ -464,3 +464,73 @@ test("Game days rendering escapes map names, respects local-only replays, and ha
   vm.runInContext('el.search.value = "not present"; renderGameDays();', context);
   assert.ok(vm.runInContext("el.gameDayRows.innerHTML", context).includes("No results"));
 });
+
+test("map leaderboard choices contain only the three combined map families", () => {
+  const data = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8"));
+  assert.deepEqual(Object.keys(data.mapRankings).sort(), ["Claymore", "Raptor Crater", "Throne"]);
+  const claymore = data.mapRankings.Claymore;
+  assert.ok(new Set(claymore.games.map(game => game.map)).size > 1);
+  for (const [name, scope] of Object.entries(data.mapRankings)) {
+    const prefix = name.toLowerCase();
+    assert.ok(scope.games.every(game => game.map.replaceAll("_", " ").toLowerCase().startsWith(prefix)));
+    assert.equal(scope.summary.all.games, scope.games.length);
+    for (const period of data.periods.filter(p => p.id !== "all")) {
+      assert.equal(scope.summary[period.id].games,
+        scope.games.filter(game => game.start_time.startsWith(period.id)).length);
+    }
+  }
+});
+
+test("map selection uses independent rankings and histories, with overall rankings unchanged on reset", () => {
+  const data = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8"));
+  const mapContext = vm.createContext({document: {addEventListener() {}}});
+  vm.runInContext(source, mapContext);
+  mapContext.data = data;
+  const map = Object.keys(data.mapRankings).find(name => data.mapRankings[name].games.length > 1);
+  mapContext.mapName = map;
+  vm.runInContext(`
+    state.data = data; state.mode = "Kings"; state.period = "all"; state.ratingMap = mapName;
+  `, mapContext);
+  const rows = JSON.parse(vm.runInContext("JSON.stringify(playerRankings())", mapContext));
+  assert.deepEqual(rows, data.mapRankings[map].rankings.kings.all);
+  const player = rows[0];
+  mapContext.player = player;
+  vm.runInContext(`
+    state.player = {id: player.user_id, name: player.name}; state.playerRole = "Kings";
+    el.playerGamesTitle = {}; el.playerGameRows = {}; el.playerChart = {};
+    renderPlayerGames();
+  `, mapContext);
+  const html = vm.runInContext("el.playerGameRows.innerHTML", mapContext);
+  const expected = data.mapRankings[map].games.filter(g => g.kings.some(([id]) => id === player.user_id));
+  assert.equal((html.match(/<tr>/g) || []).length, expected.length);
+  assert.ok(vm.runInContext("el.playerGamesTitle.textContent", mapContext).includes(map));
+  vm.runInContext("state.ratingMap = null", mapContext);
+  assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(playerRankings())", mapContext)), data.rankings.kings.all);
+});
+
+test("yearly map scores use the existing browser decay for each role and map", () => {
+  const data = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8"));
+  const mapContext = vm.createContext({document: {addEventListener() {}}});
+  vm.runInContext(source, mapContext);
+  mapContext.data = data;
+  const results = vm.runInContext(`(() => {
+    state.data = data;
+    const results = [];
+    for (const [map, scope] of Object.entries(data.mapRankings)) {
+      state.ratingMap = map;
+      for (const role of ["Kings", "Peasants"]) {
+        state.mode = role;
+        for (const period of data.periods.filter(p => p.id !== "all")) {
+          state.period = period.id;
+          const actual = playerRankings(Date.parse(data.generatedAt));
+          for (const expected of scope.rankings[role.toLowerCase()][period.id]) {
+            results.push([actual.find(r => r.user_id === expected.user_id).score, expected.score]);
+          }
+        }
+      }
+    }
+    return results;
+  })()`, mapContext);
+  assert.ok(results.length > 0);
+  for (const [actual, expected] of results) assert.equal(actual, expected);
+});

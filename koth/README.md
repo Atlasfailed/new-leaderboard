@@ -14,6 +14,21 @@ leaderboard are not added. Expand each day's details for start times, maps,
 teams, results and available replay links. This view uses the existing live
 rankings data, not a manually embedded analysis snapshot.
 
+Kings and Peasants also have a Map dropdown with just Claymore, Raptor Crater
+and Throne, combining all numbered versions of each map into one leaderboard.
+Counts include all versions for the selected year. All maps retains the
+original ratings and includes every map, including the less-played maps.
+Selecting a map starts independent role Elo at 1500 and recomputes Score,
+experience, peaks, streaks, yearly carry-over and player histories using only
+eligible games across all versions of that map. Original version names remain
+visible in game histories. The global setup baseline and win-chance model
+remain shared calibrations; they are not refitted to sparse map samples.
+Different maps do not transfer player ratings or experience. The player search
+filters names only; Maps, Games and Game days are not affected by this dropdown.
+These tables and histories are rebuilt by the existing update action.
+Native keyboard/mobile-accessible selects use the site's dark surfaces, muted
+chevrons and cyan hover/focus borders; the open picker follows the browser/OS.
+
 The YouTube embed uses the channel's uploads playlist, which lists the newest upload first. The Twitch player loads the channel and uses the current site hostname as its required `parent` parameter; streams appear in the player when the channel is live.
 
 ## How games are found

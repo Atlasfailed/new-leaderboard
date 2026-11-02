@@ -1,4 +1,4 @@
-const state = { data: null, mode: "Home", period: null, map: null, playerRole: "Kings", player: null, sort: { key: "rank", direction: "ascending" } };
+const state = { data: null, mode: "Home", period: null, map: null, ratingMap: null, playerRole: "Kings", player: null, sort: { key: "rank", direction: "ascending" } };
 const el = {};
 const SCORE_SCALE = 42;
 
@@ -15,9 +15,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     "updated", "error", "modes", "toolbar", "homeWrap", "period", "search", "playersWrap", "playerRows", "playerChart", "mapsWrap", "mapRows",
     "chartTitle", "scatter", "bands", "gamesWrap", "gameRows", "playerGames", "playerGamesTitle", "playerGameModes",
     "playerGameRows", "playerGamesClose", "gameDaysWrap", "gameDayRows",
+    "leaderboardMap", "leaderboardMapLabel", "mapRatingNote",
   ].forEach((id) => (el[id] = document.getElementById(id)));
   try {
-    const response = await fetch("data/rankings.json");
+    const response = await fetch("data/rankings.json", { cache: "no-cache" });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -31,6 +32,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   state.period = state.data.periods.find((p) => p.id !== "all")?.id || "all";
   el.period.innerHTML = state.data.periods.map((p) => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join("");
   el.period.value = state.period;
+  el.leaderboardMap.addEventListener("change", () => {
+    state.ratingMap = el.leaderboardMap.value || null;
+    render();
+  });
   document.querySelectorAll("#playersWrap th[data-sort]").forEach((header) => {
     header.querySelector("button").addEventListener("click", () => {
       const key = header.dataset.sort;
@@ -101,7 +106,21 @@ function render() {
   el.mapsWrap.hidden = mode !== "Maps";
   el.gamesWrap.hidden = mode !== "Games";
   el.gameDaysWrap.hidden = mode !== "Game days";
-  el.search.placeholder = mode === "Game days" ? "Date, player or map" : "Player or map";
+  const isPlayers = mode === "Kings" || mode === "Peasants";
+  el.leaderboardMapLabel.hidden = !isPlayers;
+  el.mapRatingNote.hidden = !isPlayers || !state.ratingMap;
+  if (isPlayers) {
+    const maps = Object.keys(state.data.mapRankings).sort((a, b) => a.localeCompare(b));
+    el.leaderboardMap.innerHTML = '<option value="">All maps</option>' + maps.map(map =>
+      `<option value="${esc(map)}">${esc(map)} (${state.data.mapRankings[map].summary[state.period].games})</option>`
+    ).join("");
+    el.leaderboardMap.value = state.ratingMap || "";
+    el.mapRatingNote.textContent = state.ratingMap
+      ? `${state.ratingMap}: independent ratings and player histories across all versions of this map.`
+      : "";
+  }
+  el.search.placeholder = isPlayers ? "Player name" : mode === "Maps" ? "Map name"
+    : mode === "Game days" ? "Date, player or map" : "Player or map";
   if (mode === "Maps") {
     renderMaps();
   } else if (mode === "Games") {
@@ -152,7 +171,7 @@ function renderPlayers() {
 }
 
 function playerRankings(now = Date.now()) {
-  const rows = state.data.rankings[state.mode.toLowerCase()][state.period] || [];
+  const rows = playerRatingScope().rankings[state.mode.toLowerCase()][state.period] || [];
   if (state.period === "all") {
     return rows;
   }
@@ -169,6 +188,10 @@ function playerRankings(now = Date.now()) {
   }).sort((a, b) => b.score - a.score || b.games - a.games
       || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0))
     .map((row, i) => ({ ...row, rank: i + 1 }));
+}
+
+function playerRatingScope() {
+  return state.ratingMap ? state.data.mapRankings[state.ratingMap] : state.data;
 }
 
 function comparePlayers(a, b) {
@@ -442,7 +465,8 @@ function renderPlayerGames() {
   let wins = 0;
   const rows = [];
   const points = [];
-  periodGames().forEach((g) => {
+  const games = playerRatingScope().games;
+  games.filter(g => state.period === "all" || g.start_time.startsWith(state.period)).forEach((g) => {
     const entry = g[role].find(([userId]) => userId === id);
     if (!entry) {
       return;
@@ -466,7 +490,7 @@ function renderPlayerGames() {
       <td>${replayLink(g)}</td>
     </tr>`);
   });
-  el.playerGamesTitle.textContent = `${name} - ${state.playerRole}: ${rows.length} games, ${wins} wins`;
+  el.playerGamesTitle.textContent = `${name} - ${state.playerRole}${state.ratingMap ? ` · ${state.ratingMap}` : ""}: ${rows.length} games, ${wins} wins`;
   el.playerGameRows.innerHTML = rows.join("") || emptyRow(9);
   el.playerChart.innerHTML = scoreChart(points.reverse());
 }
