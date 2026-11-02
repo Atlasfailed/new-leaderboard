@@ -7,7 +7,7 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
 ## How games are found
 
 - Every Sunday since 2024-09-01 is scanned through `https://api.bar-rts.com/replays?date=YYYY-MM-DD`.
-- A replay counts when it has two teams, no bots, a 5+ minute game with one winner, exactly one team with a handicap bonus (the Kings, not the larger team), and an organizer as player or spectator.
+- A replay counts when it has two teams, no bots, an API game duration strictly longer than 10 minutes (`durationMs > 600000`), one winner, exactly one team with a handicap bonus (the Kings, not the larger team), and an organizer as player or spectator. Exactly 10:00 is excluded. The duration rule applies to new scans and cache-only rebuilds, before fitting models or calculating ratings and statistics; shorter cached records are preserved but not rated.
 - Only compact per-game data is kept in `pipeline/reference/custom_games.json` (map, length, winner, bonus, players with country and OpenSkill). Rejected replay ids are kept too, so nothing is downloaded twice. Each run re-scans the last 14 days.
 
 ## Ratings
@@ -25,6 +25,11 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
   current year's Scores and ranks keep decaying in the browser (refreshed
   every minute), even without a data rebuild. All time uses cumulative
   role games with no decay.
+  Yearly tables also show Starting Score (rating and inherited experience on
+  1 January; 16.67 for a new player) and This Year's Change (current Score minus
+  Starting Score). The change includes participation gains and inherited-experience
+  decay as well as match results, so it is not the sum of game changes.
+  These display-only columns are hidden in All time; ratings are unchanged.
   Yearly Peak Score and player history use decayed experience at each game;
   the table can be lower than the last game Score as inherited experience
   continues to decay. Current-year games never lose weight within that year.
@@ -92,3 +97,62 @@ npm run scan   # scan for new games and rebuild site/data/rankings.json
 npm run data   # rebuild from the cache only
 npm run dev    # http://localhost:4174
 ```
+
+### Checking player-submitted local replays
+
+Local `.sdfz` recordings can supply the same compact game data as the replay API.
+Use the read-only inspector from this directory:
+
+```bash
+npm ci
+npm run inspect-replay -- "local replays/game.sdfz"
+npm run inspect-replay -- "local replays/game.sdfz" --compare-api
+```
+
+The inspector uses [BAR's demo-parser](https://github.com/beyond-all-reason/demo-parser),
+then the existing KOTH classifier. It prints the game ID, compact game record,
+local cache status, and (with `--compare-api`) differing compact field names.
+An empty `api_differences` list means an exact match, including player order,
+account IDs, names, countries and OpenSkill. API comparison requires the game
+to exist on the API; omit that flag for missing games. Differences cause a
+nonzero exit status. Neither command changes the cache or rankings.
+
+The supplied `2026-11-01_13-45-40-027_Raptor_Crater_V2_2026.07.04.sdfz`
+was verified against API game `8442e76abab6d5932806d2405379b7ae`: all seven
+compact fields matched exactly (9 Kings, 83 Peasants, 55% Kings bonus,
+Peasants win, 1,965,600 ms). The checked-in cache at verification only reached
+2026-10-25, so it did not yet contain this game.
+
+Ask players for an unmodified recording kept through the end of the game.
+The inspector requires game-start and game-over packets and unique BAR account
+IDs for all players; incomplete recordings are not assigned an inferred result.
+It reads both `STARTPLAYING` and `GAMEOVER`: filtering to only `GAMEOVER`
+produces zero duration in parser 5.15.1, while header-only parsing uses a
+different wall-clock duration (2,282,000 ms in the sample).
+
+### Importing validated local replays
+
+Inspection remains read-only by default. To explicitly import one or more files:
+
+```bash
+npm run inspect-replay -- --import "local replays/game-one.sdfz" "local replays/game-two.sdfz"
+npm run data
+```
+
+Imports require complete start/game-over packets, one winner, valid unique
+account IDs, and the same KOTH eligibility rules (including duration strictly
+over 10 minutes). Each ID is checked against the live replay API. A 404 allows
+a local-only import; other HTTP failures stop the import. Existing API records
+must match the local compact record exactly. Existing cache IDs are not duplicated
+or overwritten if they disagree. Previously rejected IDs require an explicit
+`--allow-rejected` after review.
+
+The entire file batch is validated before saving. Imports preserve scan metadata
+and store the source filename, SHA-256 hash and API availability inside the game
+record. API-missing games leave the Replay cell empty in both Games and player
+histories rather than showing a broken Watch link. Reimporting a matching local game after it
+appears on the API enables its Watch link. Rebuilds and automatic cache refreshes
+retain imported records; the recordings themselves are not published.
+
+This validates recording structure, not authenticity or the fairness of a result.
+Player-controlled or disputed submissions still need independent review.

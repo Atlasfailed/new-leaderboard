@@ -9,7 +9,7 @@ def game(year, kings, peasants, won=True):
     return {
         "start_time": f"{year}-06-01T12:00:00Z",
         "map": "Test",
-        "duration_ms": 600000,
+        "duration_ms": 600001,
         "kings_handicap": 50,
         "kings_won": won,
         "kings": [[user_id, f"Player {user_id}", "BE", 25] for user_id in kings],
@@ -25,6 +25,45 @@ class SnapshotTests(unittest.TestCase):
             game(2026, [1, 3], [2, 4, 5, 6]),
         ]
         self.details, _ = model.run_elo(self.games, [0, 0, 0])
+
+    def test_api_duration_must_be_strictly_longer_than_ten_minutes(self):
+        replay = {
+            "startTime": "2026-06-01T12:00:00Z",
+            "Map": {"scriptName": "Test"},
+            "Spectators": [{"name": "Twig"}],
+            "AllyTeams": [
+                {"winningTeam": True, "Players": [
+                    {"userId": 1, "name": "King", "handicap": 50},
+                ]},
+                {"winningTeam": False, "Players": [
+                    {"userId": 2, "name": "Peasant", "handicap": 0},
+                    {"userId": 3, "name": "Peasant 2", "handicap": 0},
+                ]},
+            ],
+        }
+        for duration in (0, 299999, 300000, 599999, 600000, 600001):
+            with self.subTest(duration=duration):
+                replay["durationMs"] = duration
+                self.assertEqual(model.classify_replay(replay) is not None, duration > 600000)
+        del replay["durationMs"]
+        self.assertIsNone(model.classify_replay(replay))
+
+    def test_rebuild_filters_cached_short_games_without_mutating_cache(self):
+        from copy import deepcopy
+
+        valid = game(2026, [1, 2], [3, 4, 5, 6])
+        cache = {"games": {"valid": valid}}
+        for duration in (300000, 599999, 600000):
+            short = game(2025, [7, 8], [9, 10, 11, 12])
+            short["duration_ms"] = duration
+            cache["games"][str(duration)] = short
+        before = deepcopy(cache)
+        cutoff = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        actual = model.build_custom_rankings(cache, cutoff)
+        expected = model.build_custom_rankings({"games": {"valid": valid}}, cutoff)
+        self.assertEqual(actual, expected)
+        self.assertEqual(cache, before)
+        self.assertEqual([g["id"] for g in actual["games"]], ["valid"])
 
     def test_year_carries_experience_but_keeps_annual_stats(self):
         rows = model._build_role(self.games[1:2], self.details[1:2], "kings")
@@ -42,6 +81,33 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(self.details[1]["role_games"]["kings"][3], 1)
         self.assertEqual(self.details[1]["role_games"]["peasants"][2], 1)
         self.assertEqual(self.details[1]["role_games"]["peasants"][4], 2)
+
+    def test_starting_score_uses_january_experience_and_pre_match_rating(self):
+        games = [game(2024, [1], [2, 3]), game(2026, [1, 4], [2, 3, 5])]
+        details, _ = model.run_elo(games, [0, 0, 0])
+        for role in model.ROLES:
+            rows = model._build_role(games[1:], details[1:], role, datetime(2026, 11, 1, tzinfo=timezone.utc))
+            for row in rows:
+                user_id = row["user_id"]
+                delta, rating = details[1]["deltas"][role][user_id]
+                inherited = details[1]["year_experience"][role][user_id]["inherited"]
+                self.assertEqual(row["starting_score"], round(model._score(rating - delta, inherited, role), 1))
+                if user_id in (4, 5):
+                    self.assertEqual(row["starting_score"], 800)
+                else:
+                    self.assertGreater(inherited, 0)
+                    self.assertLess(inherited, 1)
+                    self.assertNotEqual(row["starting_score"], round(model._score(
+                        rating - delta, details[1]["effective_games_before"][role][user_id], role
+                    ), 1))
+            all_time = model._build_role(games, details, role)
+            self.assertTrue(all("starting_score" not in row for row in all_time))
+
+    def test_starting_score_is_fixed_as_current_score_decays(self):
+        for role in model.ROLES:
+            early = model._build_role(self.games[1:2], self.details[1:2], role, datetime(2025, 7, 1, tzinfo=timezone.utc))
+            late = model._build_role(self.games[1:2], self.details[1:2], role, datetime(2025, 12, 1, tzinfo=timezone.utc))
+            self.assertEqual([r["starting_score"] for r in early], [r["starting_score"] for r in late])
 
     def test_inactive_players_excluded_and_future_does_not_change_snapshot(self):
         rows = model._build_role(self.games[1:2], self.details[1:2], "kings")

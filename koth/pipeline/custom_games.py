@@ -32,7 +32,7 @@ MIN_KINGS = 2
 RATIO = 2
 RESCAN_DAYS = 14
 SUNDAY = 6
-MIN_DURATION_MS = 5 * 60 * 1000
+MIN_DURATION_MS = 10 * 60 * 1000
 START_RATING = 1500
 K_NEW = 48
 K_SETTLED = 24
@@ -134,7 +134,7 @@ def classify_replay(replay: dict) -> dict | None:
     allies = replay.get("AllyTeams", [])
     if len(allies) != 2 or replay.get("hasBots") or any(not ally["Players"] for ally in allies):
         return None
-    if replay.get("durationMs", 0) < MIN_DURATION_MS:
+    if replay.get("durationMs", 0) <= MIN_DURATION_MS:
         return None
     if sum(bool(ally["winningTeam"]) for ally in allies) != 1:
         return None
@@ -343,11 +343,14 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
     for game, detail in zip(games, details):
         won = game["kings_won"] == (role == "kings")
         for user_id, name, country, *_ in game[role]:
+            delta, rating_after = detail["deltas"][role][user_id]
             entry = stats.setdefault(
                 user_id,
-                {"name": "", "country": "", "games": 0, "wins": 0, "first": game["start_time"], "results": [], "peak": 0.0},
+                {"name": "", "country": "", "games": 0, "wins": 0, "first": game["start_time"], "results": [], "peak": 0.0,
+                 "starting_score": round(_score(
+                     rating_after - delta, detail["year_experience"][role][user_id]["inherited"], role
+                 ), 1)},
             )
-            rating_after = detail["deltas"][role][user_id][1]
             entry["name"], entry["country"] = name, country or entry["country"]
             entry["games"] += 1
             entry["wins"] += won
@@ -388,6 +391,7 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
             }
         )
         if as_of is not None:
+            rows[-1]["starting_score"] = entry["starting_score"]
             rows[-1]["experience"] = {
                 **entry["year_experience"],
                 "rating": entry["rating"],
@@ -400,7 +404,11 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
 
 def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
     as_of = as_of or datetime.now(timezone.utc)
-    games_with_ids = sorted(cache["games"].items(), key=lambda item: item[1]["start_time"])
+    games_with_ids = sorted(
+        ((game_id, game) for game_id, game in cache["games"].items()
+         if game["duration_ms"] > MIN_DURATION_MS),
+        key=lambda item: item[1]["start_time"],
+    )
     games = [game for _, game in games_with_ids]
     baseline = fit_baseline(games)
     details, _ = run_elo(games, baseline)
@@ -475,6 +483,7 @@ def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
                 "kings_handicap": game["kings_handicap"],
                 "kings_expected": round(1 / (1 + math.exp(-float(np.dot(win_weights, _win_features(game))))), 3),
                 "winner": "kings" if game["kings_won"] else "peasants",
+                **({"source": game["source"]} if "source" in game else {}),
                 "kings": rosters[index]["kings"],
                 "peasants": rosters[index]["peasants"],
             }

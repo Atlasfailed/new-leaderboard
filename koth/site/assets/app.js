@@ -110,6 +110,10 @@ function render() {
 }
 
 function renderPlayers() {
+  const yearly = state.period !== "all";
+  if (!yearly && ["starting_score", "year_change"].includes(state.sort.key)) {
+    state.sort = { key: "rank", direction: "ascending" };
+  }
   const query = el.search.value.trim().toLowerCase();
   const now = Date.now();
   const rows = playerRankings(now).filter(
@@ -117,6 +121,9 @@ function renderPlayers() {
   ).sort(comparePlayers);
   document.querySelectorAll("#playersWrap th[data-sort]").forEach((header) => {
     header.setAttribute("aria-sort", header.dataset.sort === state.sort.key ? state.sort.direction : "none");
+    if (["starting_score", "year_change"].includes(header.dataset.sort)) {
+      header.hidden = !yearly;
+    }
   });
   el.playerRows.innerHTML = rows.length
     ? rows
@@ -126,6 +133,8 @@ function renderPlayers() {
           <td class="name-cell"><a href="#" data-user="${row.user_id}" data-name="${esc(row.name)}">${esc(row.name)}</a></td>
           <td>${esc(row.country)}</td>
           <td><strong>${formatScore(row.score)}</strong></td>
+          ${yearly ? `<td>${formatScore(row.starting_score)}</td>
+          ${changeCell(Math.round(displayScore(row.score) * 100) - Math.round(displayScore(row.starting_score) * 100))}` : ""}
           <td>${formatScore(row.peak)}</td>
           <td>${row.games}</td>
           <td>${row.wins}-${row.losses}</td>
@@ -135,7 +144,7 @@ function renderPlayers() {
         </tr>`
         )
         .join("")
-    : emptyRow(10);
+    : emptyRow(yearly ? 12 : 10);
 }
 
 function playerRankings(now = Date.now()) {
@@ -151,7 +160,8 @@ function playerRankings(now = Date.now()) {
     const days = Math.max(0, (cutoff - Date.parse(`${year}-01-01T00:00:00Z`)) / 86400000);
     const effective = games + inherited * 2 ** (-days / halfLifeDays);
     const score = rating - scoreK * sigmaStart / Math.sqrt(1 + Math.min(effective, maxGames[role]) / gamesScale[role]);
-    return { ...row, score: Math.round(score * 10) / 10 };
+    const roundedScore = Math.round(score * 10) / 10;
+    return { ...row, score: roundedScore, year_change: roundedScore - row.starting_score };
   }).sort((a, b) => b.score - a.score || b.games - a.games
       || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0))
     .map((row, i) => ({ ...row, rank: i + 1 }));
@@ -193,7 +203,7 @@ function renderGames() {
           <td class="chance chance-${confidence(g.kings_expected)}">${percent(g.kings_expected)}</td>
           <td>${g.winner === "kings" ? "Kings" : "Peasants"}</td>
           <td>${minutes(g.duration_ms)}</td>
-          <td>${replayLink(g.id)}</td>
+          <td>${replayLink(g)}</td>
         </tr>`
         )
         .join("")
@@ -337,7 +347,7 @@ function renderPlayerGames() {
       ${changeCell(matchChange)}
       ${changeCell(experienceChange)}
       ${changeCell(change)}
-      <td>${replayLink(g.id)}</td>
+      <td>${replayLink(g)}</td>
     </tr>`);
   });
   el.playerGamesTitle.textContent = `${name} - ${state.playerRole}: ${rows.length} games, ${wins} wins`;
@@ -385,8 +395,10 @@ function modeButtons(container, modes, active, onSelect) {
   });
 }
 
-const replayLink = (id) =>
-  `<a href="https://www.bar-rts.com/replays/${esc(id)}" target="_blank" rel="noopener">Watch</a>`;
+const replayLink = (game) =>
+  game.source?.type === "local" && !game.source.api_available
+    ? ""
+    : `<a href="https://www.bar-rts.com/replays/${esc(game.id)}" target="_blank" rel="noopener">Watch</a>`;
 const emptyRow = (n) => `<tr><td class="empty" colspan="${n}">No results</td></tr>`;
 const minutes = (ms) => `${Math.round(Number(ms) / 60000)} min`;
 const percent = (v) => (v === null || v === undefined || Number.isNaN(Number(v)) ? "-" : `${(Number(v) * 100).toFixed(1)}%`);

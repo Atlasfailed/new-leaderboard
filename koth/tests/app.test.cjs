@@ -14,7 +14,7 @@ const compare = (key, direction, a, b) => {
   return vm.runInContext("state.sort = { key, direction }; comparePlayers(a, b)", context);
 };
 
-for (const key of ["rank", "name", "country", "score", "peak", "games", "wins", "win_rate", "streak", "last_played"]) {
+for (const key of ["rank", "name", "country", "score", "starting_score", "year_change", "peak", "games", "wins", "win_rate", "streak", "last_played"]) {
   test(`sort ${key} in both directions`, () => {
     const strings = { name: ["Alice", "Bob"], country: ["BE", "NL"], last_played: ["2025-01-01", "2026-01-01"] };
     const [low, high] = strings[key] || [2, 10];
@@ -66,6 +66,56 @@ test("All time never decays", () => {
 test("completed years freeze at year-end", () => {
   assert.deepEqual(decayedRows("2025", "2026-07-01"), decayedRows("2025", "2029-01-01"));
   assert.deepEqual(decayedRows("2026", "2027-01-01"), decayedRows("2026", "2029-01-01"));
+});
+
+test("year change tracks live score minus a fixed starting score", () => {
+  decayedRows("2026", "2026-01-01");
+  vm.runInContext(`state.data.rankings.kings["2026"].forEach(row => row.starting_score = 1400);`, context);
+  const rowsAt = date => {
+    context.now = Date.parse(date);
+    return JSON.parse(vm.runInContext("JSON.stringify(playerRankings(now))", context));
+  };
+  const early = rowsAt("2026-06-01");
+  const late = rowsAt("2026-12-01");
+  for (const row of late) {
+    assert.equal(row.starting_score, 1400);
+    assert.equal(row.year_change, row.score - 1400);
+  }
+  assert.ok(late.find(r => r.user_id === 1).year_change < early.find(r => r.user_id === 1).year_change);
+});
+
+test("yearly columns reconcile displayed cents and disappear in All time", () => {
+  const headers = ["starting_score", "year_change"].map(key => ({
+    dataset: {sort: key}, hidden: true, setAttribute() {},
+  }));
+  const tableContext = vm.createContext({document: {
+    addEventListener() {}, querySelectorAll() { return headers; },
+  }});
+  vm.runInContext(source, tableContext);
+  vm.runInContext(`
+    state.mode = "Kings"; state.period = "2026";
+    state.data = {
+      scoreDecay: {halfLifeDays: 90, maxGames: {kings: 30}, sigmaStart: 350, gamesScale: {kings: 3}, scoreK: 2},
+      rankings: {kings: {"2026": [{
+        user_id: 1, name: "Player", country: "AU", games: 30, wins: 20, losses: 10,
+        win_rate: 2/3, streak: 1, last_played: "2026-06-01", peak: 1577.6, starting_score: 1542.4,
+        experience: {inherited: 0, games: 30, year: 2026, rating: 1788.7}
+      }], all: []}}
+    };
+    el.search = {value: ""}; el.playerRows = {};
+    renderPlayers();
+  `, tableContext);
+  assert.ok(headers.every(h => !h.hidden));
+  const html = vm.runInContext("el.playerRows.innerHTML", tableContext);
+  const cells = [...html.matchAll(/<td[^>]*>(.*?)<\/td>/gs)].map(m => m[1].replace(/<[^>]+>/g, ""));
+  assert.equal(cells.length, 12);
+  assert.equal(Math.round((Number(cells[4]) + Number(cells[5])) * 100), Math.round(Number(cells[3]) * 100));
+  vm.runInContext(`state.sort = {key: "year_change", direction: "descending"}; state.period = "all"; renderPlayers();`, tableContext);
+  assert.ok(headers.every(h => h.hidden));
+  assert.equal(vm.runInContext("state.sort.key", tableContext), "rank");
+  assert.ok(vm.runInContext("el.playerRows.innerHTML", tableContext).includes('colspan="10"'));
+  vm.runInContext(`state.data.rankings.kings["2026"] = []; state.period = "2026"; renderPlayers();`, tableContext);
+  assert.ok(vm.runInContext("el.playerRows.innerHTML", tableContext).includes('colspan="12"'));
 });
 
 test("current year scores decrease without rebuilding data and ranks update", () => {
@@ -270,5 +320,43 @@ test("browser scores match rebuilt pipeline scores for both roles and every year
   assert.ok(comparisons.length > 0);
   for (const [actual, expected] of comparisons) {
     assert.equal(actual, expected);
+  }
+});
+
+test("local-only recordings never advertise missing server replay links", () => {
+  const local = {id: "local", source: {type: "local", api_available: false}};
+  context.game = local;
+  assert.equal(vm.runInContext("replayLink(game)", context), "");
+  context.game = {id: "api"};
+  assert.ok(vm.runInContext("replayLink(game)", context).includes("https://www.bar-rts.com/replays/api"));
+  context.game = {...local, source: {...local.source, api_available: true}};
+  assert.ok(vm.runInContext("replayLink(game)", context).includes(">Watch</a>"));
+});
+
+test("Games and player histories leave missing replay cells empty", () => {
+  const localContext = vm.createContext({document: {addEventListener() {}}});
+  vm.runInContext(source, localContext);
+  vm.runInContext(`
+    state.period = "all";
+    state.player = {id: 1, name: "Player"};
+    state.data = {games: [{
+      id: "local", start_time: "2026-11-01", map: "Test", winner: "kings",
+      kings: [[1, "Player", 842, 42, 842, 42, 21]], peasants: [],
+      duration_ms: 700000, kings_handicap: 50, kings_expected: 0.5,
+      source: {type: "local", api_available: false}
+    }]};
+    el.search = {value: ""};
+    el.gameRows = {};
+    el.playerGamesTitle = {};
+    el.playerGameRows = {};
+    el.playerChart = {};
+    renderGames();
+    renderPlayerGames();
+  `, localContext);
+  for (const expression of ["el.gameRows.innerHTML", "el.playerGameRows.innerHTML"]) {
+    const html = vm.runInContext(expression, localContext);
+    assert.ok(/<td><\/td>\s*<\/tr>/.test(html));
+    assert.ok(!html.includes("Local recording"));
+    assert.ok(!html.includes("/replays/local"));
   }
 });
