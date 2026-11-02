@@ -91,7 +91,7 @@
               <th data-sort="rank" aria-sort="ascending"><button type="button">Rank</button></th>
               <th data-sort="name"><button type="button">Player</button></th>
               <th data-sort="country"><button type="button">Country</button></th>
-              <th data-sort="score" title="Original Score rescaled to start at 16.67, with 42 original points per displayed point. Rankings are unchanged; this is not official BAR OpenSkill. This year's games keep full weight; inherited experience halves every 90 days from 1 January. All time has no decay."><button type="button">Score</button></th>
+              <th data-sort="score" title="Score starts at 16.67; this is not official BAR OpenSkill. The experience deduction reaches its minimum at 30 effective role games. This year's games keep full weight; inherited experience halves every 90 days from 1 January. All time has no decay."><button type="button">Score</button></th>
               <th data-sort="peak" title="Highest post-game Score in the selected period, using that view's experience rule."><button type="button">Peak Score</button></th>
               <th data-sort="games" title="Games in the selected period and role"><button type="button">Games</button></th>
               <th data-sort="wins" title="Sort by wins, then fewer losses"><button type="button">W-L</button></th>
@@ -163,6 +163,7 @@
           <button class="icon-button" type="button" id="playerGamesClose" aria-label="Close">X</button>
         </header>
         <div class="mode-group" id="playerGameModes" aria-label="Role"></div>
+        <p class="muted">Score changes compare your score immediately before and after this game. Any time-based decay is already applied to the pre-game score. Match rating reflects the result; participation gain reflects deduction recovery from playing. Together they make the Game Score Change.</p>
         <div id="playerChart" class="player-chart"></div>
         <div class="table-wrap">
           <table>
@@ -173,7 +174,9 @@
                 <th>Result</th>
                 <th>Teams</th>
                 <th>Score</th>
-                <th>Score Change</th>
+                <th title="Underlying Elo change from this match, on the displayed scale. Wins gain rating; losses lose rating.">Match Rating Change</th>
+                <th title="Deduction recovery from playing this game, excluding time-based decay. Rounded to reconcile with the displayed Game Score Change.">Participation Gain</th>
+                <th title="Post-game Score minus the already-decayed Score immediately before this game. Equals Match Rating Change plus Participation Gain.">Game Score Change</th>
                 <th>Replay</th>
               </tr>
             </thead>

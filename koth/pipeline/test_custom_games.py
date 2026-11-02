@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from . import custom_games as model
 
@@ -68,31 +69,32 @@ class SnapshotTests(unittest.TestCase):
                 user_id = row["user_id"]
                 self.assertEqual(row["score"], round(model._score(final_ratings[role][user_id], counts[user_id]), 1))
 
-    def test_cumulative_count_passes_fifty_game_cap(self):
-        games = [game(2025, [1, 2], [3, 4, 5, 6]) for _ in range(55)]
+    def test_cumulative_count_passes_thirty_game_cap(self):
+        games = [game(2025, [1, 2], [3, 4, 5, 6]) for _ in range(35)]
         games.append(game(2026, [1, 2], [3, 4, 5, 6]))
         details, _ = model.run_elo(games, [0, 0, 0])
         row = model._build_role(games[-1:], details[-1:], "kings")[0]
         self.assertEqual(row["games"], 1)
-        self.assertEqual(row["score"], round(model._score(details[-1]["deltas"]["kings"][row["user_id"]][1], 50), 1))
+        self.assertEqual(details[-1]["role_games"]["kings"][row["user_id"]], 36)
+        self.assertEqual(row["score"], round(model._score(details[-1]["deltas"]["kings"][row["user_id"]][1], 30), 1))
 
     def test_exact_half_life(self):
         start = datetime(2024, 1, 1, tzinfo=timezone.utc)
         self.assertEqual(model._decay_games(50, start, start), 50)
         self.assertAlmostEqual(model._decay_games(50, start, start + timedelta(days=model.EXPERIENCE_HALF_LIFE_DAYS)), 25)
         self.assertAlmostEqual(model._decay_games(50, start, start + timedelta(days=4 * model.EXPERIENCE_HALF_LIFE_DAYS)), 3.125)
-        self.assertEqual(model._year_games(50, 10, 2024, start + timedelta(days=90)), 35)
-        self.assertEqual(model._year_games(50, 10, 2024, start + timedelta(days=180)), 22.5)
+        self.assertEqual(model._year_games(30, 10, 2024, start + timedelta(days=90)), 25)
+        self.assertEqual(model._year_games(30, 10, 2024, start + timedelta(days=180)), 17.5)
 
     def test_experience_caps_before_decay_and_recovery(self):
         games = [game(2024, [1, 2], [3, 4, 5, 6]) for _ in range(100)]
         games.append(game(2026, [1, 2], [3, 4, 5, 6]))
         details, _ = model.run_elo(games, [0, 0, 0])
-        self.assertEqual(details[-2]["effective_games"]["kings"][1], 50)
+        self.assertEqual(details[-2]["effective_games"]["kings"][1], 30)
         gap = model._parse_time(games[-1]["start_time"]) - datetime(2025, 1, 1, tzinfo=timezone.utc)
-        expected = 50 * 2 ** (-gap.total_seconds() / 86400 / model.EXPERIENCE_HALF_LIFE_DAYS) + 1
+        expected = 30 * 2 ** (-gap.total_seconds() / 86400 / model.EXPERIENCE_HALF_LIFE_DAYS) + 1
         self.assertAlmostEqual(details[-1]["effective_games"]["kings"][1], expected)
-        self.assertLess(expected, 4.2)
+        self.assertLess(expected, 2.92)
 
     def test_effective_experience_is_role_specific(self):
         self.assertEqual(self.details[1]["effective_games"]["kings"][3], 1)
@@ -161,6 +163,83 @@ class SnapshotTests(unittest.TestCase):
         inherited = 1 + 2 ** (-365 / 90)
         self.assertAlmostEqual(details[-1]["year_experience"]["kings"][1]["inherited"], inherited)
         self.assertAlmostEqual(details[-1]["effective_games"]["kings"][1], inherited + 1)
+
+    def test_compressed_curve_preserves_endpoints_and_settles_at_thirty(self):
+        self.assertEqual(model.SIGMA_FLOOR_GAMES, 30)
+        self.assertEqual(model.SIGMA_GAMES_SCALE, 3)
+        self.assertEqual(model._score(1500, 0), 800)
+        former_floor = 350 / (1 + 50 / 5) ** 0.5
+        self.assertAlmostEqual(model._sigma(30), former_floor)
+        self.assertAlmostEqual(2 * model._sigma(30) / 42, 5.02518907629606)
+        for n in range(30):
+            self.assertGreater(model._sigma(n), model._sigma(n + 1))
+            self.assertAlmostEqual(model._sigma(n), 350 / (1 + (n * 50 / 30) / 5) ** 0.5)
+        for n in (30, 31, 50, 1000):
+            self.assertEqual(model._sigma(n), model._sigma(30))
+        self.assertEqual(model._year_games(30, 30, 2026, datetime(2026, 6, 1, tzinfo=timezone.utc)), 30)
+
+    def test_compressing_experience_does_not_change_elo_or_match_deltas(self):
+        baseline = model.fit_baseline(self.games)
+        details, ratings = model.run_elo(self.games, baseline)
+        with patch.multiple(model, SIGMA_FLOOR_GAMES=50, SIGMA_GAMES_SCALE=5.0):
+            former_details, former_ratings = model.run_elo(self.games, baseline)
+        self.assertEqual(ratings, former_ratings)
+        self.assertEqual(
+            [detail["deltas"] for detail in details],
+            [detail["deltas"] for detail in former_details],
+        )
+
+    def test_history_uses_already_decayed_pre_game_score_after_a_long_break(self):
+        games = [game(2025, [1, 2], [3, 4, 5, 6], i % 2 == 0) for i in range(30)]
+        games.append(game(2026, [1, 2], [3, 4, 5, 6]))
+        payload = model.build_custom_rankings(
+            {"games": {str(i): g for i, g in enumerate(games)}},
+            datetime(2026, 7, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(payload["scoreDecay"]["maxGames"], 30)
+        self.assertEqual(payload["scoreDecay"]["gamesScale"], 3)
+        details, _ = model.run_elo(games, model.fit_baseline(games))
+        for output, detail in zip(reversed(payload["games"]), details):
+            for role in model.ROLES:
+                for entry in output[role]:
+                    self.assertEqual(len(entry), 7)
+                    self.assertEqual(entry[6], round(detail["deltas"][role][entry[0]][0], 1))
+                    if output["winner"] == role:
+                        self.assertGreater(entry[6], 0)
+                    else:
+                        self.assertLess(entry[6], 0)
+        latest = payload["games"][0]["kings"][0]
+        self.assertGreater(latest[6], 0)
+        self.assertGreater(latest[5], latest[6])
+        self.assertGreater(latest[3], 0)
+        uid = latest[0]
+        delta, rating = details[-1]["deltas"]["kings"][uid]
+        before_games = details[-1]["effective_games_before"]["kings"][uid]
+        expected_before_games = model._year_games(30, 0, 2026, model._parse_time(games[-1]["start_time"]))
+        self.assertAlmostEqual(before_games, expected_before_games)
+        expected_before_score = model._score(rating - delta, expected_before_games)
+        expected_after_score = model._score(rating, expected_before_games + 1)
+        self.assertEqual(latest[5], round(expected_after_score - expected_before_score, 1))
+        previous_score = payload["games"][1]["kings"][0][4]
+        self.assertLess(latest[4], previous_score)
+        self.assertLess(expected_before_score, previous_score)
+
+    def test_pre_game_experience_handles_first_games_same_day_and_saturation(self):
+        games = [game(2025, [1, 2], [3, 4, 5, 6]) for _ in range(32)]
+        games.append(game(2026, [1, 2], [3, 4, 5, 6]))
+        games[-1]["start_time"] = "2026-01-01T00:00:00Z"
+        details, _ = model.run_elo(games, [0, 0, 0])
+        for role, uid in (("kings", 1), ("peasants", 3)):
+            self.assertEqual(details[0]["effective_games_before"][role][uid], 0)
+            self.assertEqual(details[1]["effective_games_before"][role][uid], 1)
+            for index in (30, 31, 32):
+                self.assertEqual(details[index]["effective_games_before"][role][uid], 30)
+                self.assertEqual(details[index]["effective_games"][role][uid], 30)
+        payload = model.build_custom_rankings({"games": {str(i): g for i, g in enumerate(games)}})
+        for output in payload["games"][:3]:
+            for role in model.ROLES:
+                for entry in output[role]:
+                    self.assertEqual(entry[5], entry[6])
 
 
 if __name__ == "__main__":

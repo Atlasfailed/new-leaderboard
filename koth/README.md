@@ -17,13 +17,13 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
   Elo carries forward unchanged. Yearly Scores use recent effective role
   experience: games in the selected year keep full weight throughout that year.
   Only experience inherited on 1 January halves every 90 days:
-  `E = min(50, games_this_year + inherited * 2^(-days_since_Jan_1 / 90))`.
+  `E = min(30, games_this_year + inherited * 2^(-days_since_Jan_1 / 90))`.
   The capped effective count at year-end becomes next year's inherited
   experience; skipped years continue to discount the inherited count.
   Completed years freeze the deduction at 31 December 23:59:59 UTC; the
   current year's Scores and ranks keep decaying in the browser (refreshed
   every minute), even without a data rebuild. All time uses cumulative
-  role games with no decay and retains its original Scores and history.
+  role games with no decay.
   Yearly Peak Score and player history use decayed experience at each game;
   the table can be lower than the last game Score as inherited experience
   continues to decay. Current-year games never lose weight within that year.
@@ -31,13 +31,32 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
   Every player-table column can be sorted in either direction using its header;
   W-L sorts by wins, with fewer losses first when sorting descending.
 - Elo, start 1500, one rating per role. K is 48 for a player's first 8 games in a role, then 24. Everyone on a team gets the same change.
-- Rank is by Score = Elo - 2 x sigma, where sigma = 350 / sqrt(1 + min(experience, 50) / 5). Experience means cumulative role games for All time and the decaying effective count for year views. This is a participation heuristic, not calibrated statistical uncertainty.
+- Rank is by Score = Elo - 2 x sigma, where sigma = 350 / sqrt(1 + min(experience, 30) / 3). Experience means cumulative role games for All time and the decaying effective count for year views. This is a participation heuristic, not calibrated statistical uncertainty.
+  The curve is compressed from the former 50-game cap and scale of 5:
+  the initial deduction (16.67 displayed points) and minimum deduction
+  (about 5.03) are unchanged, but the minimum is reached at 30 effective
+  role games. It does not taper to zero. Historical Scores, peaks and ranks
+  are rebuilt under this policy; Elo and match-rating changes are unchanged.
+- Player history separates **Match Rating Change** (the underlying Elo change),
+  **Participation Gain** (deduction recovery from playing this game), and
+  **Game Score Change** (their sum, relative to the already-decayed Score
+  immediately before this game). Time-based decay is applied before the game,
+  not charged to it. Yearly table Scores continue to decay between games.
+  Wins gain match rating and losses lose it, even when the net Score moves
+  the other way for losses during early participation recovery. Participation
+  gains reconcile the two displayed changes
+  after rounding to two decimals. The chart continues to show post-game Score.
+  Game roster arrays store `[id, name, all_time_score, all_time_net_change,
+  yearly_score, yearly_game_change, match_rating_change]` on the internal scale.
+  Historical chart points remain post-game Scores, so the gap between two
+  points can include time-based decay and need not equal Game Score Change.
 - The website displays Score and Peak Score on a BAR-like scale:
   `displayed_score = 50/3 + (Score - 800) / 42`, shown to two decimal places.
   The starting Score of 800 displays as 16.67; game changes are divided by 42
   without adding the starting offset. Tables, histories and charts all use
-  this display scale. Stored scores, ranking order, sorting, Elo updates and
-  experience decay are unchanged, including tie-breaks before display rounding.
+  this display scale. The display conversion itself does not change stored
+  scores, ranking order, sorting, Elo updates or experience decay, including
+  tie-breaks before display rounding.
   This is a cosmetic rescaling, not official BAR OpenSkill or a calibration
   of per-game changes against BAR.
 - The expected result starts from a logistic fit on bonus and team-size ratio, shifted by the difference of the team average ratings.

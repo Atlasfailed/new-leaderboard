@@ -40,8 +40,8 @@ PROVISIONAL_GAMES = 8
 # Ranking score is a conservative estimate: Elo minus SCORE_K x uncertainty.
 # Uncertainty starts at SIGMA_START and shrinks with games played.
 SIGMA_START = 350.0
-SIGMA_GAMES_SCALE = 5.0
-SIGMA_FLOOR_GAMES = 50
+SIGMA_GAMES_SCALE = 3.0
+SIGMA_FLOOR_GAMES = 30
 SCORE_K = 2.0
 EXPERIENCE_HALF_LIFE_DAYS = 90.0
 CACHE_PATH = REFERENCE_DIR / "custom_games.json"
@@ -294,6 +294,7 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
             for role in ROLES
         }
         effective_games = {role: {} for role in ROLES}
+        effective_games_before = {role: {} for role in ROLES}
         year_experience = {role: {} for role in ROLES}
         for role in ROLES:
             for user_id, *_ in game[role]:
@@ -306,6 +307,7 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
                     )
                     count = 0
                     year = game_time.year
+                effective_games_before[role][user_id] = _year_games(inherited, count, year, game_time)
                 count = min(SIGMA_FLOOR_GAMES, count + 1)
                 experience[role][user_id] = (inherited, count, year)
                 effective_games[role][user_id] = _year_games(inherited, count, year, game_time)
@@ -313,6 +315,7 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
         details.append({
             "expected": expected, "deltas": deltas, "role_games": role_games,
             "effective_games": effective_games, "year_experience": year_experience,
+            "effective_games_before": effective_games_before,
         })
     return details, ratings
 
@@ -429,7 +432,6 @@ def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
 
     # Keep undecayed and decayed histories so All time retains its original scores.
     last_score = {role: defaultdict(lambda: _score(START_RATING, 0)) for role in ROLES}
-    last_decayed_score = {role: defaultdict(lambda: _score(START_RATING, 0)) for role in ROLES}
     rosters = []
     for (_, game), detail in zip(games_with_ids, details):
         per_role = {}
@@ -438,12 +440,14 @@ def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
             for user_id, name, *_ in game[role]:
                 score = _score(detail["deltas"][role][user_id][1], detail["role_games"][role][user_id])
                 decayed_score = _score(detail["deltas"][role][user_id][1], detail["effective_games"][role][user_id])
+                delta, rating = detail["deltas"][role][user_id]
+                score_before = _score(rating - delta, detail["effective_games_before"][role][user_id])
                 rows.append([
                     user_id, name, round(score, 1), round(score - last_score[role][user_id], 1),
-                    round(decayed_score, 1), round(decayed_score - last_decayed_score[role][user_id], 1),
+                    round(decayed_score, 1), round(decayed_score - score_before, 1),
+                    round(delta, 1),
                 ])
                 last_score[role][user_id] = score
-                last_decayed_score[role][user_id] = decayed_score
             per_role[role] = rows
         rosters.append(per_role)
 

@@ -46,10 +46,10 @@ function decayedRows(period, now) {
     state.mode = "Kings";
     state.period = period;
     state.data = {
-      scoreDecay: {halfLifeDays: 90, maxGames: 50, sigmaStart: 350, gamesScale: 5, scoreK: 2},
+      scoreDecay: {halfLifeDays: 90, maxGames: 30, sigmaStart: 350, gamesScale: 3, scoreK: 2},
       rankings: {kings: Object.fromEntries(["all", "2025", "2026"].map(year => [year, [
         {user_id: 1, name: "A", games: 1, rank: 1, score: 1488.9, peak: 1488.9,
-         experience: {inherited: 50, games: 1, year: Number(year), rating: 1700}},
+         experience: {inherited: 30, games: 1, year: Number(year), rating: 1700}},
         {user_id: 2, name: "B", games: 10, rank: 2, score: 1400, peak: 1400,
          experience: {inherited: 0, games: 10, year: Number(year), rating: 1800}}
       ]]))}
@@ -78,13 +78,13 @@ test("current year scores decrease without rebuilding data and ranks update", ()
 test("one half-life halves effective experience exactly", () => {
   const rows = decayedRows("2026", "2026-04-01T00:00:00Z");
   const score = rows.find(r => r.user_id === 1).score;
-  const expected = Math.round((1700 - 700 / Math.sqrt(1 + 26 / 5)) * 10) / 10;
+  const expected = Math.round((1700 - 700 / Math.sqrt(1 + 16 / 3)) * 10) / 10;
   assert.equal(score, expected);
 });
 
 test("current-year games retain full weight at year-end", () => {
   const row = decayedRows("2026", "2026-12-31T23:59:59Z").find(r => r.user_id === 2);
-  const expected = Math.round((1800 - 700 / Math.sqrt(1 + 10 / 5)) * 10) / 10;
+  const expected = Math.round((1800 - 700 / Math.sqrt(1 + 10 / 3)) * 10) / 10;
   assert.equal(row.score, expected);
 });
 
@@ -149,9 +149,9 @@ for (const period of ["all", "2026"]) {
       state.player = {id: 1, name: "Player"};
       state.data = {games: [
         {id: "new", start_time: "2026-06-02", map: "Test", winner: "peasants",
-         kings: [[1, "Player", 842, -42, 884, -84]], peasants: []},
+         kings: [[1, "Player", 842, -42, 884, -84, -21]], peasants: []},
         {id: "old", start_time: "2026-06-01", map: "Test", winner: "kings",
-         kings: [[1, "Player", 884, 84, 968, 168]], peasants: []}
+         kings: [[1, "Player", 884, 84, 968, 168, 42]], peasants: []}
       ]};
       el.playerGamesTitle = {};
       el.playerGameRows = {};
@@ -164,7 +164,67 @@ for (const period of ["all", "2026"]) {
     assert.ok(html.includes(`<td>${score}</td>`));
     assert.ok(html.includes(`class="delta-down">${loss}`));
     assert.ok(html.includes(`class="delta-up">${win}`));
+    assert.ok(html.includes('class="delta-down">-0.50'));
+    assert.ok(html.includes('class="delta-up">+1.00'));
     assert.ok(chart.includes(`: ${score}</title>`));
     assert.ok(!chart.includes("NaN"));
   });
 }
+
+test("a winning match shows gains relative to its already-decayed pre-game Score", () => {
+  vm.runInContext(`
+    state.period = "2026";
+    state.player = {id: 1, name: "Player"};
+    state.playerRole = "Kings";
+    state.data = {games: [{
+      id: "win", start_time: "2026-04-05", map: "Test", winner: "kings",
+      kings: [[1, "Player", 1500, 9.9, 1400, 14.7, 9.9]], peasants: []
+    }]};
+    el.playerGamesTitle = {};
+    el.playerGameRows = {};
+    el.playerChart = {};
+    renderPlayerGames();
+  `, context);
+  const html = vm.runInContext("el.playerGameRows.innerHTML", context);
+  assert.ok(html.includes("<td>Win</td>"));
+  assert.ok(html.includes('class="delta-up">+0.24'));
+  assert.ok(html.includes('class="delta-up">+0.11'));
+  assert.ok(html.includes('class="delta-up">+0.35'));
+  assert.ok(!html.includes("delta-down"));
+  assert.equal((html.match(/<td[ >]/g) || []).length, 9);
+});
+
+test("displayed change components reconcile at rounding boundaries without negative zero", () => {
+  for (const [net, match] of [[-9.2, 9.9], [0, -0.1], [1, 1], [-1, -1], [84, 42]]) {
+    context.net = net;
+    context.match = match;
+    const cells = vm.runInContext(`(() => {
+      const total = Math.round(net / SCORE_SCALE * 100);
+      const rating = Math.round(match / SCORE_SCALE * 100);
+      return [changeCell(rating), changeCell(total - rating), changeCell(total)];
+    })()`, context);
+    const values = Array.from(cells, cell => Number(cell.match(/>([^<]+)</)[1]));
+    assert.equal(Math.round((values[0] + values[1]) * 100), Math.round(values[2] * 100));
+    assert.ok(cells.every(cell => !cell.includes("NaN") && !cell.includes(">-0.00")));
+  }
+});
+
+test("empty player history spans all nine columns", () => {
+  vm.runInContext("state.data = {games: []}; renderPlayerGames();", context);
+  assert.ok(vm.runInContext("el.playerGameRows.innerHTML", context).includes('colspan="9"'));
+});
+
+test("browser scoring settles at thirty effective games using the published policy", () => {
+  decayedRows("2026", "2026-01-01");
+  const scores = vm.runInContext(`
+    state.data.rankings.kings["2026"] = [29, 30, 31, 50].map(games => ({
+      user_id: games, name: String(games), games, experience: {inherited: 0, games, year: 2026, rating: 1500}
+    }));
+    playerRankings(Date.parse("2026-06-01"));
+  `, context);
+  const score = games => scores.find(row => row.user_id === games).score;
+  assert.ok(score(29) < score(30));
+  assert.equal(score(30), score(31));
+  assert.equal(score(30), score(50));
+  assert.equal(score(30), Math.round((1500 - 700 / Math.sqrt(11)) * 10) / 10);
+});

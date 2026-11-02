@@ -321,7 +321,9 @@ function renderPlayerGames() {
       return;
     }
     const score = entry[state.period === "all" ? 2 : 4];
-    const change = Number((entry[state.period === "all" ? 3 : 5] / SCORE_SCALE).toFixed(2));
+    const change = Math.round(entry[state.period === "all" ? 3 : 5] / SCORE_SCALE * 100);
+    const matchChange = Math.round(entry[6] / SCORE_SCALE * 100);
+    const experienceChange = change - matchChange;
     const won = g.winner === role;
     wins += won;
     points.push({ time: g.start_time, score: displayScore(score) });
@@ -331,13 +333,19 @@ function renderPlayerGames() {
       <td>${won ? "Win" : "Loss"}</td>
       <td>${g.kings.length} vs ${g.peasants.length}</td>
       <td>${formatScore(score)}</td>
-      <td class="${change > 0 ? "delta-up" : change < 0 ? "delta-down" : ""}">${change > 0 ? "+" : ""}${change.toFixed(2)}</td>
+      ${changeCell(matchChange)}
+      ${changeCell(experienceChange)}
+      ${changeCell(change)}
       <td>${replayLink(g.id)}</td>
     </tr>`);
   });
   el.playerGamesTitle.textContent = `${name} - ${state.playerRole}: ${rows.length} games, ${wins} wins`;
-  el.playerGameRows.innerHTML = rows.join("") || emptyRow(7);
+  el.playerGameRows.innerHTML = rows.join("") || emptyRow(9);
   el.playerChart.innerHTML = scoreChart(points.reverse());
+}
+
+function changeCell(cents) {
+  return `<td class="${cents > 0 ? "delta-up" : cents < 0 ? "delta-down" : ""}">${cents > 0 ? "+" : ""}${(cents / 100).toFixed(2)}</td>`;
 }
 
 function scoreChart(points) {
