@@ -83,6 +83,45 @@ class SnapshotTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(model.leaderboard_map(name), expected)
 
+    def test_map_caps_apply_at_exact_thresholds_without_changing_elo(self):
+        for role, cap in model.MAP_SIGMA_FLOOR_GAMES.items():
+            with self.subTest(role=role):
+                scores = [model._score(1500, count, role, model.MAP_SIGMA_FLOOR_GAMES)
+                          for count in (cap - 1, cap, cap + 1, 50)]
+                self.assertLess(scores[0], scores[1])
+                self.assertEqual(scores[1], scores[2])
+                self.assertEqual(scores[2], scores[3])
+                self.assertAlmostEqual(scores[1], 1500 - 700 / (1 + cap / model.SIGMA_GAMES_SCALE[role]) ** .5)
+        games = [game(2025, [1], [2, 3]) for _ in range(55)]
+        for i, row in enumerate(games):
+            row["start_time"] = (datetime(2025, 6, 1, tzinfo=timezone.utc) + timedelta(days=i)).isoformat()
+            row["map"] = "Throne_V8"
+        following = game(2026, [1], [2, 3])
+        following["map"] = "Throne_V9"
+        games.append(following)
+        standard, ratings = model.run_elo(games, [0, 0, 0])
+        mapped, map_ratings = model.run_elo(games, [0, 0, 0], model.MAP_SIGMA_FLOOR_GAMES)
+        self.assertEqual(ratings, map_ratings)
+        for old, new in zip(standard, mapped):
+            self.assertEqual(old["deltas"], new["deltas"])
+        for role, cap in model.MAP_SIGMA_FLOOR_GAMES.items():
+            self.assertEqual(mapped[-2]["year_experience"][role][1 if role == "kings" else 2]["games"], cap)
+            self.assertEqual(mapped[-1]["year_experience"][role][1 if role == "kings" else 2]["inherited"], cap)
+        payload = model.build_custom_rankings({"games": {str(i): row for i, row in enumerate(games)}})
+        mapped, _ = model.run_elo(games, model.fit_baseline(games), model.MAP_SIGMA_FLOOR_GAMES)
+        scope = payload["mapRankings"]["Throne"]
+        self.assertEqual(scope["scoreDecay"]["maxGames"], {"kings": 10, "peasants": 20})
+        self.assertEqual(payload["scoreDecay"]["maxGames"], {"kings": 30, "peasants": 50})
+        for role in model.ROLES:
+            expected = model._build_role(games, mapped, role, max_games=model.MAP_SIGMA_FLOOR_GAMES)
+            self.assertEqual(scope["rankings"][role]["all"], expected)
+            for i, row in enumerate(reversed(scope["games"])):
+                entry = row[role][0]
+                uid = entry[0]
+                rating = mapped[i]["deltas"][role][uid][1]
+                self.assertEqual(entry[2], round(model._score(
+                    rating, mapped[i]["role_games"][role][uid], role, model.MAP_SIGMA_FLOOR_GAMES), 1))
+
     def test_api_duration_must_be_strictly_longer_than_ten_minutes(self):
         replay = {
             "startTime": "2026-06-01T12:00:00Z",

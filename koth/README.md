@@ -23,7 +23,13 @@ experience, peaks, streaks, yearly carry-over and player histories using only
 eligible games across all versions of that map. Original version names remain
 visible in game histories. The global setup baseline and win-chance model
 remain shared calibrations; they are not refitted to sparse map samples.
-Different maps do not transfer player ratings or experience. The player search
+Different maps do not transfer player ratings or experience.
+Map-specific experience deductions and yearly carry-over cap at 10 games for
+Kings and 20 for Peasants, versus 30/50 for All maps. The scale denominators
+remain 3 for Kings and 5 for Peasants; only the caps change, so the per-map
+minimum deduction is larger. Elo and match-rating changes are unaffected.
+The pipeline exports each map's score policy for matching browser decay.
+The player search
 filters names only; Maps, Games and Game days are not affected by this dropdown.
 These tables and histories are rebuilt by the existing update action.
 Native keyboard/mobile-accessible selects use the site's dark surfaces, muted

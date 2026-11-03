@@ -172,7 +172,7 @@ function playerRankings(now = Date.now()) {
     return rows;
   }
   const cutoff = Math.min(now, Date.parse(`${state.period}-12-31T23:59:59Z`));
-  const { halfLifeDays, maxGames, sigmaStart, gamesScale, scoreK } = state.data.scoreDecay;
+  const { halfLifeDays, maxGames, sigmaStart, gamesScale, scoreK } = playerRatingScope().scoreDecay;
   const role = state.mode.toLowerCase();
   return rows.map((row) => {
     const { inherited, games, year, rating } = row.experience;

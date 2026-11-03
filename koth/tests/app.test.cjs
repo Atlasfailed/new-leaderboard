@@ -471,6 +471,8 @@ test("map leaderboard choices contain only the three combined map families", () 
   const claymore = data.mapRankings.Claymore;
   assert.ok(new Set(claymore.games.map(game => game.map)).size > 1);
   for (const [name, scope] of Object.entries(data.mapRankings)) {
+    assert.deepEqual(scope.scoreDecay.maxGames, {kings: 10, peasants: 20});
+    assert.deepEqual(scope.scoreDecay.gamesScale, data.scoreDecay.gamesScale);
     const prefix = name.toLowerCase();
     assert.ok(scope.games.every(game => game.map.replaceAll("_", " ").toLowerCase().startsWith(prefix)));
     assert.equal(scope.summary.all.games, scope.games.length);
@@ -479,6 +481,30 @@ test("map leaderboard choices contain only the three combined map families", () 
         scope.games.filter(game => game.start_time.startsWith(period.id)).length);
     }
   }
+});
+
+test("browser map deductions stop at 10 King and 20 Peasant games while overall policy stays 30/50", () => {
+  const data = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8"));
+  const local = vm.createContext({document: {addEventListener() {}}});
+  vm.runInContext(source, local);
+  local.data = data;
+  for (const [role, cap] of [["kings", 10], ["peasants", 20]]) {
+    local.role = role;
+    local.cap = cap;
+    const scores = vm.runInContext(`
+      state.data = data; state.ratingMap = "Throne"; state.period = "2026";
+      state.mode = role === "kings" ? "Kings" : "Peasants";
+      state.data.mapRankings.Throne.rankings[role]["2026"] = [cap - 1, cap, cap + 1].map(count => ({
+        user_id: count, name: String(count), games: count, starting_score: 800,
+        experience: {inherited: 0, games: count, year: 2026, rating: 1500}
+      }));
+      playerRankings(Date.parse("2026-06-01")).sort((a, b) => a.user_id - b.user_id).map(row => row.score);
+    `, local);
+    assert.ok(scores[0] < scores[1]);
+    assert.equal(scores[1], scores[2]);
+    assert.equal(scores[1], Math.round((1500 - 700 / Math.sqrt(1 + cap / data.scoreDecay.gamesScale[role])) * 10) / 10);
+  }
+  assert.deepEqual(data.scoreDecay.maxGames, {kings: 30, peasants: 50});
 });
 
 test("map selection uses independent rankings and histories, with overall rankings unchanged on reset", () => {

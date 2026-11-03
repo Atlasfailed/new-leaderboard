@@ -42,6 +42,7 @@ PROVISIONAL_GAMES = 8
 SIGMA_START = 350.0
 SIGMA_GAMES_SCALE = {"kings": 3.0, "peasants": 5.0}
 SIGMA_FLOOR_GAMES = {"kings": 30, "peasants": 50}
+MAP_SIGMA_FLOOR_GAMES = {"kings": 10, "peasants": 20}
 SCORE_K = 2.0
 EXPERIENCE_HALF_LIFE_DAYS = 90.0
 CACHE_PATH = REFERENCE_DIR / "custom_games.json"
@@ -262,7 +263,9 @@ def _kings_chance(game: dict, baseline: list[float], kings_avg: float, peasants_
     return 1 / (1 + math.exp(-logit))
 
 
-def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]:
+def run_elo(
+    games: list[dict], baseline: list[float], max_games: dict[str, int] = SIGMA_FLOOR_GAMES,
+) -> tuple[list[dict], dict]:
     """Play all games in order. Each player has a separate Kings and Peasants rating.
 
     The expected result starts from the bonus/size baseline, then shifts by the
@@ -301,16 +304,16 @@ def run_elo(games: list[dict], baseline: list[float]) -> tuple[list[dict], dict]
                 inherited, count, year = experience[role].get(user_id, (0.0, 0, game_time.year))
                 if year != game_time.year:
                     boundary = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-                    inherited = _year_games(inherited, count, year, boundary, role)
+                    inherited = _year_games(inherited, count, year, boundary, role, max_games)
                     inherited = _decay_games(
                         inherited, boundary, datetime(game_time.year, 1, 1, tzinfo=timezone.utc)
                     )
                     count = 0
                     year = game_time.year
-                effective_games_before[role][user_id] = _year_games(inherited, count, year, game_time, role)
-                count = min(SIGMA_FLOOR_GAMES[role], count + 1)
+                effective_games_before[role][user_id] = _year_games(inherited, count, year, game_time, role, max_games)
+                count = min(max_games[role], count + 1)
                 experience[role][user_id] = (inherited, count, year)
-                effective_games[role][user_id] = _year_games(inherited, count, year, game_time, role)
+                effective_games[role][user_id] = _year_games(inherited, count, year, game_time, role, max_games)
                 year_experience[role][user_id] = {"inherited": inherited, "games": count, "year": year}
         details.append({
             "expected": expected, "deltas": deltas, "role_games": role_games,
@@ -325,20 +328,26 @@ def _decay_games(games: float, last: datetime, as_of: datetime) -> float:
     return games * 2 ** (-days / EXPERIENCE_HALF_LIFE_DAYS)
 
 
-def _year_games(inherited: float, games: int, year: int, as_of: datetime, role: str) -> float:
+def _year_games(
+    inherited: float, games: int, year: int, as_of: datetime, role: str,
+    max_games: dict[str, int] = SIGMA_FLOOR_GAMES,
+) -> float:
     start = datetime(year, 1, 1, tzinfo=timezone.utc)
-    return min(SIGMA_FLOOR_GAMES[role], games + _decay_games(inherited, start, as_of))
+    return min(max_games[role], games + _decay_games(inherited, start, as_of))
 
 
-def _sigma(games: float, role: str) -> float:
-    return SIGMA_START / math.sqrt(1 + min(games, SIGMA_FLOOR_GAMES[role]) / SIGMA_GAMES_SCALE[role])
+def _sigma(games: float, role: str, max_games: dict[str, int] = SIGMA_FLOOR_GAMES) -> float:
+    return SIGMA_START / math.sqrt(1 + min(games, max_games[role]) / SIGMA_GAMES_SCALE[role])
 
 
-def _score(rating: float, games: float, role: str) -> float:
-    return rating - SCORE_K * _sigma(games, role)
+def _score(rating: float, games: float, role: str, max_games: dict[str, int] = SIGMA_FLOOR_GAMES) -> float:
+    return rating - SCORE_K * _sigma(games, role, max_games)
 
 
-def _build_role(games: list[dict], details: list[dict], role: str, as_of: datetime | None = None) -> list[dict]:
+def _build_role(
+    games: list[dict], details: list[dict], role: str, as_of: datetime | None = None,
+    max_games: dict[str, int] = SIGMA_FLOOR_GAMES,
+) -> list[dict]:
     stats: dict[int, dict] = {}
     for game, detail in zip(games, details):
         won = game["kings_won"] == (role == "kings")
@@ -348,7 +357,7 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
                 user_id,
                 {"name": "", "country": "", "games": 0, "wins": 0, "first": game["start_time"], "results": [], "peak": 0.0,
                  "starting_score": round(_score(
-                     rating_after - delta, detail["year_experience"][role][user_id]["inherited"], role
+                     rating_after - delta, detail["year_experience"][role][user_id]["inherited"], role, max_games
                  ), 1)},
             )
             entry["name"], entry["country"] = name, country or entry["country"]
@@ -360,13 +369,13 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
             entry["effective_games"] = detail["effective_games"][role][user_id]
             entry["year_experience"] = detail["year_experience"][role][user_id]
             score_games = entry["effective_games"] if as_of is not None else entry["role_games"]
-            entry["peak"] = max(entry["peak"], _score(rating_after, score_games, role))
+            entry["peak"] = max(entry["peak"], _score(rating_after, score_games, role, max_games))
             entry["results"].append(won)
 
     rows = []
     for user_id, entry in stats.items():
         score_games = entry["role_games"] if as_of is None else _year_games(
-            **entry["year_experience"], as_of=as_of, role=role
+            **entry["year_experience"], as_of=as_of, role=role, max_games=max_games
         )
         streak = 0
         for won in reversed(entry["results"]):
@@ -383,7 +392,7 @@ def _build_role(games: list[dict], details: list[dict], role: str, as_of: dateti
                 "losses": entry["games"] - entry["wins"],
                 "win_rate": entry["wins"] / entry["games"],
                 "rating": round(entry["rating"], 1),
-                "score": round(_score(entry["rating"], score_games, role), 1),
+                "score": round(_score(entry["rating"], score_games, role, max_games), 1),
                 "peak": round(entry["peak"], 1),
                 "streak": streak if entry["results"][-1] else -streak,
                 "first_played": entry["first"],
@@ -430,20 +439,13 @@ def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
             map_games[name].append(item)
     return {
         "generatedAt": as_of.isoformat(timespec="seconds"),
-        "scoreDecay": {
-            "halfLifeDays": EXPERIENCE_HALF_LIFE_DAYS,
-            "maxGames": SIGMA_FLOOR_GAMES,
-            "sigmaStart": SIGMA_START,
-            "gamesScale": SIGMA_GAMES_SCALE,
-            "scoreK": SCORE_K,
-        },
         "organizers": ORGANIZERS,
         "startRating": START_RATING,
         "model": {"winWeights": [round(w, 4) for w in win_weights], "backtest": backtest, "baseline": [round(w, 4) for w in baseline], "kNew": K_NEW, "kSettled": K_SETTLED, "provisionalGames": PROVISIONAL_GAMES},
         "periods": periods,
         **overall,
         "mapRankings": {
-            name: _build_rating_scope(subset, baseline, win_weights, periods, as_of)
+            name: _build_rating_scope(subset, baseline, win_weights, periods, as_of, MAP_SIGMA_FLOOR_GAMES)
             for name, subset in sorted(map_games.items())
         },
     }
@@ -451,10 +453,10 @@ def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
 
 def _build_rating_scope(
     games_with_ids: list[tuple[str, dict]], baseline: list[float], win_weights: list[float],
-    periods: list[dict], as_of: datetime,
+    periods: list[dict], as_of: datetime, max_games: dict[str, int] = SIGMA_FLOOR_GAMES,
 ) -> dict:
     games = [game for _, game in games_with_ids]
-    details, _ = run_elo(games, baseline)
+    details, _ = run_elo(games, baseline, max_games)
     rankings = {role: {} for role in ROLES}
     summary = {}
     for period in periods:
@@ -469,7 +471,7 @@ def _build_rating_scope(
             as_of, datetime(int(period["id"]), 12, 31, 23, 59, 59, tzinfo=timezone.utc)
         )
         for role in ROLES:
-            rankings[role][period["id"]] = _build_role(subset, subset_details, role, cutoff)
+            rankings[role][period["id"]] = _build_role(subset, subset_details, role, cutoff, max_games)
         kings_wins = sum(g["kings_won"] for g in subset)
         summary[period["id"]] = {
             "games": len(subset),
@@ -478,17 +480,17 @@ def _build_rating_scope(
         }
 
     # Keep undecayed and decayed histories so All time retains its original scores.
-    last_score = {role: defaultdict(lambda role=role: _score(START_RATING, 0, role)) for role in ROLES}
+    last_score = {role: defaultdict(lambda role=role: _score(START_RATING, 0, role, max_games)) for role in ROLES}
     rosters = []
     for (_, game), detail in zip(games_with_ids, details):
         per_role = {}
         for role in ROLES:
             rows = []
             for user_id, name, *_ in game[role]:
-                score = _score(detail["deltas"][role][user_id][1], detail["role_games"][role][user_id], role)
-                decayed_score = _score(detail["deltas"][role][user_id][1], detail["effective_games"][role][user_id], role)
+                score = _score(detail["deltas"][role][user_id][1], detail["role_games"][role][user_id], role, max_games)
+                decayed_score = _score(detail["deltas"][role][user_id][1], detail["effective_games"][role][user_id], role, max_games)
                 delta, rating = detail["deltas"][role][user_id]
-                score_before = _score(rating - delta, detail["effective_games_before"][role][user_id], role)
+                score_before = _score(rating - delta, detail["effective_games_before"][role][user_id], role, max_games)
                 rows.append([
                     user_id, name, round(score, 1), round(score - last_score[role][user_id], 1),
                     round(decayed_score, 1), round(decayed_score - score_before, 1),
@@ -499,6 +501,13 @@ def _build_rating_scope(
         rosters.append(per_role)
 
     return {
+        "scoreDecay": {
+            "halfLifeDays": EXPERIENCE_HALF_LIFE_DAYS,
+            "maxGames": max_games,
+            "sigmaStart": SIGMA_START,
+            "gamesScale": SIGMA_GAMES_SCALE,
+            "scoreK": SCORE_K,
+        },
         "summary": summary,
         "rankings": rankings,
         "games": [
