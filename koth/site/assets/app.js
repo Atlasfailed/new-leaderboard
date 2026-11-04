@@ -228,9 +228,8 @@ function renderGames() {
         .map(
           (g) => `<tr>
           <td>${formatDate(g.start_time)}</td>
-          <td>${esc(g.map)}</td>
-          <td title="${esc(g.kings.map(([, n]) => n).join(", "))}">${g.kings.length}</td>
-          <td>${g.peasants.length}</td>
+          <td title="${esc(g.map)}"><span class="map-label">${esc(mapLabel(g.map))}</span></td>
+          <td title="Kings: ${esc(g.kings.map(([, n]) => n).join(", "))}">${g.kings.length} vs ${g.peasants.length}</td>
           <td>+${g.kings_handicap}%</td>
           <td class="chance chance-${confidence(g.kings_expected)}">${percent(g.kings_expected)}</td>
           <td>${g.winner === "kings" ? "Kings" : "Peasants"}</td>
@@ -239,7 +238,11 @@ function renderGames() {
         </tr>`
         )
         .join("")
-    : emptyRow(9);
+    : emptyRow(8);
+}
+
+function mapLabel(map) {
+  return map.replace(/[\s_]+v?\d+(\.\d+)*$/i, "").replace(/_/g, " ");
 }
 
 const SYDNEY_TIME_ZONE = "Australia/Sydney";

@@ -494,6 +494,12 @@ td strong {
   line-height: 1.25;
 }
 
+.map-label {
+  display: inline-block;
+  max-width: 150px;
+  white-space: normal;
+}
+
 .flag {
   width: 20px;
   height: 14px;
@@ -505,7 +511,7 @@ td strong {
 
 .maps-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -544,6 +550,12 @@ td strong {
 .chart-panel svg {
   width: 100%;
   height: auto;
+}
+
+#scatter svg {
+  display: block;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .chart-panel text {

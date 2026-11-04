@@ -562,3 +562,11 @@ test("yearly map scores use the existing browser decay for each role and map", (
   assert.ok(results.length > 0);
   for (const [actual, expected] of results) assert.equal(actual, expected);
 });
+
+test("map labels drop underscores and version suffixes", () => {
+  const label = (map) => vm.runInContext(`mapLabel(${JSON.stringify(map)})`, context);
+  assert.equal(label("Raptor_Crater_V2"), "Raptor Crater");
+  assert.equal(label("All That Glitters Extended v1.0.2"), "All That Glitters Extended");
+  assert.equal(label("Claymore 3.0.4"), "Claymore");
+  assert.equal(label("DSD 8 Way 1.1"), "DSD 8 Way");
+});
