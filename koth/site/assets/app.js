@@ -149,21 +149,30 @@ function renderPlayers() {
         .map(
           (row) => `<tr>
           <td>${row.rank}</td>
-          <td class="name-cell"><a href="#" data-user="${row.user_id}" data-name="${esc(row.name)}">${esc(row.name)}</a></td>
-          <td>${esc(row.country)}</td>
+          <td class="name-cell">${countryFlag(row.country)}<a href="#" data-user="${row.user_id}" data-name="${esc(row.name)}">${esc(row.name)}</a></td>
           <td><strong>${formatScore(row.score)}</strong></td>
           ${yearly ? `<td>${formatScore(row.starting_score)}</td>
           ${changeCell(Math.round(displayScore(row.score) * 100) - Math.round(displayScore(row.starting_score) * 100))}` : ""}
           <td>${formatScore(row.peak)}</td>
-          <td>${row.games}</td>
-          <td>${row.wins}-${row.losses}</td>
+          <td>${row.games} (${row.wins}-${row.losses})</td>
           <td>${percent(row.win_rate)}</td>
           <td>${row.streak > 0 ? "+" : ""}${row.streak}</td>
           <td>${formatDate(row.last_played)}</td>
         </tr>`
         )
         .join("")
-    : emptyRow(yearly ? 12 : 10);
+    : emptyRow(yearly ? 10 : 8);
+}
+
+const FALLBACK_FLAG = '<img class="flag" src="assets/logo.jpg" alt="" title="Unknown country">';
+
+function countryFlag(country) {
+  const code = String(country || "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) {
+    return FALLBACK_FLAG;
+  }
+  return `<img class="flag" src="https://flagcdn.com/${code.toLowerCase()}.svg" alt="${code}" title="${code}" `
+    + `onerror="this.onerror=null;this.src='assets/logo.jpg';this.title='Unknown country'">`;
 }
 
 function playerRankings(now = Date.now()) {

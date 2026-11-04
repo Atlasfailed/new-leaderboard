@@ -479,6 +479,30 @@ td strong {
   color: var(--primary);
 }
 
+#playersWrap th,
+#playersWrap td {
+  padding: 8px 10px;
+  text-align: center;
+}
+
+#playersWrap th:nth-child(-n + 2),
+#playersWrap td:nth-child(-n + 2) {
+  text-align: left;
+}
+
+#playersWrap th[data-sort] button {
+  line-height: 1.25;
+}
+
+.flag {
+  width: 20px;
+  height: 14px;
+  margin-right: 6px;
+  border-radius: 2px;
+  object-fit: cover;
+  vertical-align: -2px;
+}
+
 .maps-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);

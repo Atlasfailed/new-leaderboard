@@ -67,8 +67,9 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
   the table can be lower than the last game Score as inherited experience
   continues to decay. Current-year games never lose weight within that year.
   The latest available year (currently 2026) is selected by default.
-  Every player-table column can be sorted in either direction using its header;
-  W-L sorts by wins, with fewer losses first when sorting descending.
+  Every player-table column can be sorted in either direction using its header.
+  The Player column shows a country flag (the AllReasonNoLogic logo when the
+  country is unknown), and Games shows the record as `games (wins-losses)`.
 - Elo, start 1500, one rating per role. K is 48 for a player's first 8 games in a role, then 24. Everyone on a team gets the same change.
 - Rank is by Score = Elo - 2 x sigma, where sigma = 350 / sqrt(1 + min(experience, role_cap) / role_scale).
   Kings use cap 30 and scale 3; Peasants retain cap 50 and scale 5.

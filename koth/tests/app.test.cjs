@@ -108,14 +108,16 @@ test("yearly columns reconcile displayed cents and disappear in All time", () =>
   assert.ok(headers.every(h => !h.hidden));
   const html = vm.runInContext("el.playerRows.innerHTML", tableContext);
   const cells = [...html.matchAll(/<td[^>]*>(.*?)<\/td>/gs)].map(m => m[1].replace(/<[^>]+>/g, ""));
-  assert.equal(cells.length, 12);
-  assert.equal(Math.round((Number(cells[4]) + Number(cells[5])) * 100), Math.round(Number(cells[3]) * 100));
+  assert.equal(cells.length, 10);
+  assert.ok(html.includes('class="flag"') && html.includes("flagcdn.com/au.svg"));
+  assert.ok(cells.includes("30 (20-10)"));
+  assert.equal(Math.round((Number(cells[3]) + Number(cells[4])) * 100), Math.round(Number(cells[2]) * 100));
   vm.runInContext(`state.sort = {key: "year_change", direction: "descending"}; state.period = "all"; renderPlayers();`, tableContext);
   assert.ok(headers.every(h => h.hidden));
   assert.equal(vm.runInContext("state.sort.key", tableContext), "rank");
-  assert.ok(vm.runInContext("el.playerRows.innerHTML", tableContext).includes('colspan="10"'));
+  assert.ok(vm.runInContext("el.playerRows.innerHTML", tableContext).includes('colspan="8"'));
   vm.runInContext(`state.data.rankings.kings["2026"] = []; state.period = "2026"; renderPlayers();`, tableContext);
-  assert.ok(vm.runInContext("el.playerRows.innerHTML", tableContext).includes('colspan="12"'));
+  assert.ok(vm.runInContext("el.playerRows.innerHTML", tableContext).includes('colspan="10"'));
 });
 
 test("current year scores decrease without rebuilding data and ranks update", () => {
