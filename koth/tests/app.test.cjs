@@ -336,7 +336,7 @@ test("local-only recordings never advertise missing server replay links", () => 
 });
 
 test("Games and player histories leave missing replay cells empty", () => {
-  const localContext = vm.createContext({document: {addEventListener() {}}});
+  const localContext = vm.createContext({document: {addEventListener() {}, querySelectorAll() { return []; }}});
   vm.runInContext(source, localContext);
   vm.runInContext(`
     state.period = "all";
@@ -361,6 +361,53 @@ test("Games and player histories leave missing replay cells empty", () => {
     assert.ok(!html.includes("Local recording"));
     assert.ok(!html.includes("/replays/local"));
   }
+});
+
+test("Games sort numerically by total players, bonus and date without mutating data", () => {
+  const headers = ["start_time", "players", "kings_handicap"].map(key => ({
+    dataset: {sort: key}, setAttribute(name, value) { this[name] = value; },
+  }));
+  const tableContext = vm.createContext({document: {
+    addEventListener() {}, querySelectorAll() { return headers; },
+  }});
+  vm.runInContext(source, tableContext);
+  vm.runInContext(`
+    state.period = "all";
+    state.sort = {key: "score", direction: "ascending"};
+    state.data = {games: [
+      {id: "small", start_time: "2026-01-04", kings: [[1, "Alice"]], peasants: [[2, "Bob"]], kings_handicap: 100},
+      {id: "large", start_time: "2026-02-01", kings: [[1, "Alice"]], peasants: Array(9).fill([2, "Bob"]), kings_handicap: 20},
+      {id: "medium", start_time: "2025-03-02", kings: Array(3).fill([3, "Carol"]), peasants: [[4, "Dave"]], kings_handicap: 50},
+      {id: "tied", start_time: "2026-03-01", kings: [[1, "Alice"]], peasants: [[2, "Bob"]], kings_handicap: 100}
+    ].map(g => ({map: "Test", winner: "kings", duration_ms: 700000, kings_expected: 0.5, ...g}))};
+    el.search = {value: ""}; el.gameRows = {};
+  `, tableContext);
+  const original = vm.runInContext("JSON.stringify(state.data)", tableContext);
+  const render = (key = "start_time", direction = "descending") => {
+    tableContext.sortKey = key;
+    tableContext.sortDirection = direction;
+    vm.runInContext("state.gameSort = {key: sortKey, direction: sortDirection}; renderGames();", tableContext);
+    assert.equal(headers.find(h => h.dataset.sort === key)["aria-sort"], direction);
+    assert.ok(headers.filter(h => h.dataset.sort !== key).every(h => h["aria-sort"] === "none"));
+    return [...vm.runInContext("el.gameRows.innerHTML", tableContext).matchAll(/\/replays\/([^"]+)"/g)].map(m => m[1]);
+  };
+  assert.deepEqual(render(), ["tied", "large", "small", "medium"]);
+  assert.deepEqual(render("start_time", "ascending"), ["medium", "small", "large", "tied"]);
+  assert.deepEqual(render("players"), ["large", "medium", "tied", "small"]);
+  assert.deepEqual(render("players", "ascending"), ["tied", "small", "medium", "large"]);
+  assert.deepEqual(render("kings_handicap"), ["tied", "small", "medium", "large"]);
+  assert.deepEqual(render("kings_handicap", "ascending"), ["large", "medium", "tied", "small"]);
+  assert.equal(vm.runInContext("JSON.stringify(state.data)", tableContext), original);
+  assert.equal(vm.runInContext("state.sort.key", tableContext), "score");
+  vm.runInContext('state.period = "2026";', tableContext);
+  assert.deepEqual(render("players"), ["large", "tied", "small"]);
+  vm.runInContext('el.search.value = "alice";', tableContext);
+  assert.deepEqual(render("kings_handicap"), ["tied", "small", "large"]);
+  vm.runInContext('el.search.value = "test";', tableContext);
+  assert.deepEqual(render("players"), ["large", "tied", "small"]);
+  vm.runInContext('el.search.value = "carol";', tableContext);
+  assert.deepEqual(render("players"), []);
+  assert.ok(vm.runInContext("el.gameRows.innerHTML", tableContext).includes('colspan="8"'));
 });
 
 function dayGame(id, start, duration = 20, extra = {}) {

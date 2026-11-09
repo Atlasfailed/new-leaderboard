@@ -2,6 +2,11 @@
 
 A Cloudflare Pages site for the AllReasonNoLogic community, with channel links and embeds for the latest YouTube uploads and Twitch channel, as well as Sunday King of the Hill leaderboards for Beyond All Reason. The KOTH views are Kings, Peasants, Maps (win rate per map, setup scatter and win rate by team-size ratio) and Games (every game with a Kings win chance and replay link).
 
+In Games, click Kings vs Peasants to sort by total player count, or Bonus to
+sort by the Kings' handicap percentage. Click again to reverse the order.
+Date restores chronological sorting (newest first by default). Sorting retains
+the selected year and search; ties show newer games first.
+
 Game days shows the published leaderboard games as daily timelines in
 Australia/Sydney time (AEST/AEDT), newest first, with Kings/Peasants win colours.
 Sessions run noon-to-noon so after-midnight games remain with the preceding

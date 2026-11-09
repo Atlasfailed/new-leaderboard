@@ -1,4 +1,4 @@
-const state = { data: null, mode: "Home", period: null, map: null, ratingMap: null, playerRole: "Kings", player: null, sort: { key: "rank", direction: "ascending" } };
+const state = { data: null, mode: "Home", period: null, map: null, ratingMap: null, playerRole: "Kings", player: null, sort: { key: "rank", direction: "ascending" }, gameSort: { key: "start_time", direction: "descending" } };
 const el = {};
 const SCORE_SCALE = 42;
 
@@ -36,16 +36,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.ratingMap = el.leaderboardMap.value || null;
     render();
   });
-  document.querySelectorAll("#playersWrap th[data-sort]").forEach((header) => {
-    header.querySelector("button").addEventListener("click", () => {
-      const key = header.dataset.sort;
-      state.sort = {
-        key,
-        direction: state.sort.key === key
-          ? (state.sort.direction === "ascending" ? "descending" : "ascending")
-          : (["rank", "name", "country"].includes(key) ? "ascending" : "descending"),
-      };
-      renderPlayers();
+  [
+    ["playersWrap", "sort", renderPlayers],
+    ["gamesWrap", "gameSort", renderGames],
+  ].forEach(([id, sortState, renderRows]) => {
+    document.querySelectorAll(`#${id} th[data-sort]`).forEach((header) => {
+      header.querySelector("button").addEventListener("click", () => {
+        const key = header.dataset.sort;
+        state[sortState] = {
+          key,
+          direction: state[sortState].key === key
+            ? (state[sortState].direction === "ascending" ? "descending" : "ascending")
+            : (["rank", "name", "country"].includes(key) ? "ascending" : "descending"),
+        };
+        renderRows();
+      });
     });
   });
   modeButtons(el.modes, ["Home", "Kings", "Peasants", "Maps", "Games", "Game days"], state.mode, (mode) => {
@@ -215,6 +220,17 @@ function confidence(chance) {
   return chance >= 0.6 ? "high" : chance <= 0.4 ? "medium" : "low";
 }
 
+function compareGames(a, b) {
+  const { key, direction } = state.gameSort;
+  const value = (game) => key === "players"
+    ? game.kings.length + game.peasants.length
+    : key === "start_time" ? Date.parse(game.start_time) : game[key];
+  const order = value(a) - value(b);
+  return (direction === "ascending" ? order : -order)
+    || Date.parse(b.start_time) - Date.parse(a.start_time)
+    || a.id.localeCompare(b.id);
+}
+
 function renderGames() {
   const query = el.search.value.trim().toLowerCase();
   const games = periodGames().filter(
@@ -222,7 +238,10 @@ function renderGames() {
       !query ||
       g.map.toLowerCase().includes(query) ||
       [...g.kings, ...g.peasants].some(([, name]) => name.toLowerCase().includes(query))
-  );
+  ).sort(compareGames);
+  document.querySelectorAll("#gamesWrap th[data-sort]").forEach((header) => {
+    header.setAttribute("aria-sort", header.dataset.sort === state.gameSort.key ? state.gameSort.direction : "none");
+  });
   el.gameRows.innerHTML = games.length
     ? games
         .map(
