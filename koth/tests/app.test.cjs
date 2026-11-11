@@ -3,7 +3,7 @@ const { readFileSync } = require("node:fs");
 const { test } = require("node:test");
 const vm = require("node:vm");
 
-const source = ["ratings.js", "app.js"]
+const source = ["data.js", "ratings.js", "app.js"]
   .map(file => readFileSync(`${__dirname}/../site/assets/${file}`, "utf8")).join("\n");
 const context = vm.createContext({ document: { addEventListener() {} } });
 vm.runInContext(source, context);

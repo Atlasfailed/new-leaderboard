@@ -4,4 +4,5 @@ __pycache__/
 .env
 .venv/
 node_modules/
+.wrangler/
 site/data/*.json

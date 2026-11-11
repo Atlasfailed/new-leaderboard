@@ -105,6 +105,7 @@ function overlayStatus(message, warning = false) {
 function startOverlay(options) {
   let data = null;
   let refreshing = false;
+  const loadRankings = createRankingsLoader();
   document.getElementById("overlay").classList.toggle("stacked", options.layout === "stacked");
 
   async function refresh() {
@@ -118,11 +119,7 @@ function startOverlay(options) {
       if (data) {
         renderOverlay(overlayView(data, options));
       }
-      const response = await fetch("data/rankings.json", { cache: "no-store", signal: controller.signal });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const incoming = await response.json();
+      const incoming = await loadRankings(controller.signal);
       const view = overlayView(incoming, options);
       renderOverlay(view);
       data = incoming;

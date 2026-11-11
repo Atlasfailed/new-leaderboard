@@ -131,7 +131,6 @@ these links preserve only the selected main tab.
 
 ## Stream overlay (OBS)
 
-
 The transparent [top-three overlay](https://allreasonnologic-koth.pages.dev/overlay.html)
 shows Kings and Peasants side by side, with gold/cyan accents and the same
 Scores, yearly experience decay and tie-breaks as the website.
@@ -152,36 +151,139 @@ Options can be combined in the URL:
 - `?map=Claymore`: map-specific rankings; also accepts `Raptor%20Crater` or `Throne`.
 - Example: `overlay.html?layout=stacked&period=all&map=Throne`.
 
-The overlay fetches published rankings every 60 seconds (10-second timeout),
+The overlay checks published rankings every 60 seconds (10-second timeout),
 recalculates yearly decay, and gently highlights changed rows without reloading.
 Names are safely rendered as text and long names are truncated, not wrapped.
 Reduced-motion preferences disable animations.
 Connection or invalid-data errors are logged and shown discreetly in the footer;
 previously loaded rankings remain visible and automatic retries continue.
 The footer shows the data publication time in UTC, not the last polling time.
-It does not promise live match results: new games appear only after the existing
-update workflow publishes them (normally every 20 minutes in the Sunday window).
+It does not promise live match results: new games appear only after the data
+update workflow publishes them. GitHub's Sunday schedule remains best-effort;
+an external scheduler can dispatch that workflow more frequently.
 Invalid year/map options show an error rather than silently displaying another table.
 
 For a local preview, run `npm run dev` from this folder and open
 `http://localhost:4174/overlay.html`. Test browser calculations and overlay behavior
 with `node --test tests/app.test.cjs tests/overlay.test.cjs`.
 
-## Automatic updates
+## Independent website and rankings updates
 
-`.github/workflows/koth-update-and-deploy.yml` (in the repo root) is scheduled every Sunday every 20 minutes from 11:00 through 16:00 inclusive in `Europe/Brussels` (CET in winter, CEST in summer), on every push to `main` affecting KOTH files or the workflow, and manually. GitHub Actions scheduled runs can be delayed or dropped during busy periods; the interval is not guaranteed. It scans for new games, rebuilds `site/data/rankings.json`, commits the replay cache if it changed, and deploys to Cloudflare Pages.
+The website and live data have separate publication paths:
 
-Scheduled checks deploy to Cloudflare only when cached game records change.
-New rejected replay IDs or scan metadata alone do not trigger a deployment.
-Pushes and manual runs still deploy even when game data is unchanged, so
-website changes and deliberate redeployments are always published.
+```text
+Mac -> GitHub main -> Deploy KOTH Website -> Cloudflare Pages (HTML/CSS/JS)
+Scheduler -> Update KOTH Rankings Data -> Separate Pages data project (JSON)
+Browser/OBS -> /data/rankings.json -> redirect -> data project /rankings/v1.json
+```
 
-One-time setup:
+The existing site and OBS URLs do not change. A static `_redirects` rule sends
+rankings requests to `https://allreasonnologic-koth-data.pages.dev/rankings/v1.json`.
+Both projects use Cloudflare Pages direct uploads: no R2, payment information,
+Workers, Pages Functions or runtime credentials are required.
+Rankings remain public, as on the original website.
 
-1. Create a GitHub repository and push this folder to `main`.
-2. Repository settings, Actions, General, Workflow permissions: read and write (the workflow commits the cache). If `main` is protected, allow the bot to push or the cache commit step will fail.
-3. Add repository secrets `CLOUDFLARE_API_TOKEN` (Cloudflare Pages edit permission) and `CLOUDFLARE_ACCOUNT_ID`.
-4. Create the Pages project once (Workers & Pages, Create, Pages, Direct Upload, name it `allreasonnologic-koth`), or run `npx wrangler pages project create allreasonnologic-koth --production-branch=main`. The site will be at `https://allreasonnologic-koth.pages.dev`. The name is set in the `--project-name` flag of the workflow.
+- **Deploy KOTH Website** (`.github/workflows/koth-update-and-deploy.yml` in
+  the repo root) runs on site/dependency changes and manually.
+  It deploys the latest `main`, verifies that valid v1 data is available first,
+  and never scans replays or publishes rankings.
+- **Update KOTH Rankings Data** (`.github/workflows/koth-update-data.yml`)
+  scans games, rebuilds and validates rankings, commits replay cache changes
+  as before, and deploys changed data to the data project without deploying the website.
+  It runs on pipeline/dependency/contract changes, manually, and Sundays at
+  11:07, 11:27, 11:47 through 15:47, plus 16:07 in `Europe/Brussels`.
+  This offsets the top of the hour but does not guarantee GitHub scheduling.
+  A Pi/Home Assistant scheduler can dispatch this same workflow; it does not
+  need website files or a Cloudflare token.
+- Each path has its own concurrency group. Keep **one data publisher**: do
+  not run direct Pi uploads alongside the workflow. Website and data updates
+  can overlap safely because they cannot overwrite each other's output.
+
+Both website and overlay poll every minute. Once data is loaded, a small HEAD
+request checks its ETag; unchanged data is reused without a body download.
+Changed data is fetched with browser-native HTTP revalidation.
+This avoids re-downloading the roughly 10 MB JSON when unchanged even in OBS
+browsers with limited caches. Simple GET/HEAD requests avoid custom cross-origin
+request headers and preflight requests.
+The data project's `_headers` allows public cross-origin GETs, exposes ETags,
+and requires revalidation instead of serving an indefinitely cached snapshot.
+Requests time out after
+10 seconds; failures are logged and shown while last-good data remains visible.
+Initial load failures retry too. Website updates preserve the selected tab,
+year, map, search and sorting, and refresh an open player history.
+
+Pages deployments switch a complete data snapshot, so readers do not see partial
+uploads. The publisher validates before deploying, rejects older publications,
+ignores generation-time and browser-recomputed yearly decay/rank changes, and includes the previous live snapshot at
+`rankings/v1.previous.json` alongside `rankings/v1.json`.
+It verifies the public JSON and CORS/cache headers after deployment.
+Replay history remains backed up in Git. That previous snapshot is for recovery;
+publish corrections with a fresh generation time rather than making browsers
+accept an older publication. A failed deployment or verification fails the workflow.
+
+Cloudflare's Free plan has limits, including a 25 MiB maximum per asset and
+500 builds per month; review the [current Pages limits](https://developers.cloudflare.com/pages/platform/limits/)
+for account-specific usage. The publisher rejects oversized JSON before deploying
+and skips unchanged content. Data updates still use Pages deployments, but never
+overwrite website files. This is isolation, not an unlimited streaming database.
+
+### One-time setup and safe rollout (no billing activation)
+
+1. Keep the existing GitHub Actions secrets **`CLOUDFLARE_API_TOKEN`**
+   (Account / Cloudflare Pages / Edit) and **`CLOUDFLARE_ACCOUNT_ID`**.
+   They must cover the account containing both projects.
+   No R2 permissions, R2 keys or new secrets are needed.
+   Never paste tokens into source code, issues or chat.
+2. Ensure GitHub Actions can write repository contents (the data workflow
+   commits the replay cache); branch protection must permit that bot update.
+3. Push these changes to `main`, but **leave the repository variable
+   `KOTH_DATA_READY` unset**. Both normal jobs are gated until enabled, so the
+   existing live deployment stays intact during setup.
+4. Run **Update KOTH Rankings Data** manually with **bootstrap = true** and
+   wait for success. This creates the **`allreasonnologic-koth-data`**
+   Pages Direct Upload project if it does not exist (no billing or R2 activation),
+   then publishes a fresh scan while the existing site
+   still serves its bundled rankings:
+
+   ```bash
+   gh workflow run koth-update-data.yml --repo Atlasfailed/new-leaderboard -f bootstrap=true
+   ```
+
+5. Once the bootstrap run succeeds, set the Actions repository variable
+   **`KOTH_DATA_READY`** to **`true`** and run the website deployment:
+
+   ```bash
+   gh variable set KOTH_DATA_READY --repo Atlasfailed/new-leaderboard --body true
+   gh workflow run koth-update-and-deploy.yml --repo Atlasfailed/new-leaderboard
+   ```
+
+6. Verify `https://allreasonnologic-koth.pages.dev/data/rankings.json` redirects
+   to the data project, whose response has `Access-Control-Allow-Origin: *`,
+   `Access-Control-Expose-Headers: ETag, X-KOTH-Schema-Version`, an ETag,
+   `X-KOTH-Schema-Version: 1`, and a revalidating `Cache-Control`.
+   Verify website/overlay loading and conditional **304** responses.
+
+Data failures do not silently fall back to a bundled, outdated file. The website
+deployment preflight prevents switching before the data project is ready.
+Do not delete the data project while troubleshooting. If it becomes unavailable,
+existing browser sessions retain last-good data; new sessions show the error
+and retry automatically. Previous Pages deployments also remain available for
+inspection and recovery.
+
+Schema v1 is additive to the existing JSON format (`schemaVersion: 1`).
+Local generated files without that field remain supported. Unsupported future
+versions are rejected. Breaking changes require a new versioned object and a
+coordinated consumer/function rollout; do not overwrite v1 with a new schema.
+
+After rollout, externally trigger data updates without redeploying the site:
+
+```bash
+gh workflow run koth-update-data.yml --repo Atlasfailed/new-leaderboard
+```
+
+This separation removes deployment conflicts, not GitHub runner delays. Direct
+Pi processing would be a separate later change. Home Assistant scheduling and
+Pi credentials are not configured by these workflows.
 
 ## Local use
 
@@ -190,7 +292,13 @@ python -m pip install -r requirements.txt
 npm run scan   # scan for new games and rebuild site/data/rankings.json
 npm run data   # rebuild from the cache only
 npm run dev    # http://localhost:4174
+npm test       # JS tests; generate local data first
 ```
+
+The Python static server reads locally generated `site/data/rankings.json`;
+it ignores `_redirects` and requires no Cloudflare credentials.
+Remote data publication is explicit: `npm run publish-data` requires Cloudflare
+Pages credentials and the single-writer rule. No website deployment is performed.
 
 ### Checking player-submitted local replays
 

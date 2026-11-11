@@ -3,7 +3,7 @@ const { readFileSync } = require("node:fs");
 const { test } = require("node:test");
 const vm = require("node:vm");
 
-const source = ["ratings.js", "overlay.js"]
+const source = ["data.js", "ratings.js", "overlay.js"]
   .map(file => readFileSync(`${__dirname}/../site/assets/${file}`, "utf8")).join("\n");
 const cached = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8"));
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -31,10 +31,10 @@ function harness(search = "") {
   const timeouts = new Map();
   const requests = [];
   let ready;
-  let fetchImpl = async () => ({ ok: true, json: async () => plain(cached) });
+  let fetchImpl = async () => ({ ok: true, headers: new Headers(), json: async () => plain(cached) });
   let timerId = 0;
   const context = vm.createContext({
-    URLSearchParams, AbortController,
+    URLSearchParams, AbortController, Headers,
     document: {
       addEventListener: (_, listener) => { ready = listener; },
       getElementById: id => elements[id],
@@ -42,7 +42,10 @@ function harness(search = "") {
     },
     window: { location: { search }, matchMedia: () => ({ matches: false }) },
     console: { error: (...args) => errors.push(args) },
-    fetch: (...args) => { requests.push(args); return fetchImpl(...args); },
+    fetch: async (...args) => {
+      requests.push(args);
+      return { headers: new Headers(), ...await fetchImpl(...args) };
+    },
     setInterval: (fn, delay) => intervals.push({ fn, delay }),
     setTimeout: (fn, delay) => { timeouts.set(++timerId, { fn, delay }); return timerId; },
     clearTimeout: id => timeouts.delete(id),
@@ -156,14 +159,14 @@ test("unchanged rows do not animate and reduced-motion disables changed-row anim
   assert.equal(item.animations, 1);
 });
 
-test("polling updates rows without replacing them, shows publication time and uses no-store", async () => {
+test("polling updates rows without replacing them, shows publication time and revalidates the HTTP cache", async () => {
   const h = harness("?layout=stacked");
   h.start();
   await settled();
   assert.ok(h.elements.overlay.classes.has("stacked"));
   assert.equal(h.intervals[0].delay, 60000);
   assert.equal(h.requests[0][0], "data/rankings.json");
-  assert.equal(h.requests[0][1].cache, "no-store");
+  assert.equal(h.requests[0][1].cache, "no-cache");
   assert.equal(h.timeouts.size, 0);
   assert.match(h.elements.status.textContent, /^Published .* UTC$/);
   assert.match(h.elements.status.textContent, /2026-11-03/);

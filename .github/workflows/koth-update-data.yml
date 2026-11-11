@@ -1,0 +1,98 @@
+name: Update KOTH Rankings Data
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "koth/pipeline/**"
+      - "koth/requirements.txt"
+      - "koth/site/assets/data.js"
+      - "koth/package.json"
+      - "koth/package-lock.json"
+      - ".github/workflows/koth-update-data.yml"
+  schedule:
+    # Best-effort fallback; an external scheduler can dispatch this same workflow.
+    - cron: "7,27,47 11-15 * * 0"
+      timezone: "Europe/Brussels"
+    - cron: "7 16 * * 0"
+      timezone: "Europe/Brussels"
+  workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: "Initial data-project publication before switching the website (one time only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: koth-data-publish
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: koth
+
+jobs:
+  update-data:
+    if: vars.KOTH_DATA_READY == 'true' || (github.event_name == 'workflow_dispatch' && inputs.bootstrap)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out latest pipeline and replay cache
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: koth/requirements.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: koth/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          npm ci
+
+      - name: Scan for new games and build data
+        run: python -m pipeline.custom_games --output site/data
+
+      - name: Validate data before persisting replay changes
+        run: node -e 'const fs = require("node:fs"); require("./site/assets/data.js").validateRankings(JSON.parse(fs.readFileSync("site/data/rankings.json")));'
+
+      - name: Commit updated replay cache
+        run: |
+          if git diff --quiet -- pipeline/reference/custom_games.json; then
+            echo "No replay cache changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pipeline/reference/custom_games.json
+          git commit -m "Update KOTH games"
+          git pull --rebase origin main
+          git push
+
+      - name: Publish changed rankings to the data project without deploying the website
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BOOTSTRAP: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
+        run: |
+          if [ "$BOOTSTRAP" = "true" ]; then
+            npm run publish-data -- --bootstrap
+          else
+            npm run publish-data
+          fi

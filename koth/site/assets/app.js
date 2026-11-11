@@ -34,28 +34,77 @@ function setupTabNavigation() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+function applySiteRankings(data) {
+  const firstLoad = !state.data;
+  state.data = data;
+  if (!state.data.periods.some(p => p.id === state.period)) {
+    if (state.period) {
+      console.warn("Selected period is no longer published:", state.period);
+    }
+    state.period = state.data.periods.find(p => p.id !== "all")?.id || "all";
+  }
+  if (state.ratingMap && !Object.hasOwn(data.mapRankings, state.ratingMap)) {
+    console.warn("Selected map is no longer published:", state.ratingMap);
+    state.ratingMap = null;
+  }
+  el.updated.textContent = formatDateTime(data.generatedAt);
+  el.period.innerHTML = data.periods.map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join("");
+  el.period.value = state.period;
+  if (firstLoad) {
+    ["period", "leaderboardMap", "search"].forEach(id => { el[id].disabled = false; });
+    document.querySelectorAll("#playersWrap th[data-sort] button, #gamesWrap th[data-sort] button")
+      .forEach(button => { button.disabled = false; });
+  }
+  render();
+  if (!firstLoad && state.player && el.playerGames.open) {
+    renderPlayerGames();
+  }
+}
+
+function startSiteUpdates() {
+  const loadRankings = createRankingsLoader();
+  let refreshing = false;
+  async function refresh() {
+    if (refreshing) {
+      return;
+    }
+    refreshing = true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const incoming = await loadRankings(controller.signal);
+      if (incoming !== state.data) {
+        applySiteRankings(incoming);
+      } else if (state.mode === "Kings" || state.mode === "Peasants") {
+        renderPlayers();
+      }
+      el.error.hidden = true;
+    } catch (error) {
+      console.error("KOTH website refresh failed:", error);
+      el.error.textContent = state.data
+        ? `Could not update rankings (${error.message}). Showing the last loaded data; retrying automatically.`
+        : `Could not load data (${error.message}). Retrying automatically.`;
+      el.error.hidden = false;
+      if (state.data && (state.mode === "Kings" || state.mode === "Peasants")) {
+        renderPlayers();
+      }
+    } finally {
+      clearTimeout(timeout);
+      refreshing = false;
+    }
+  }
+  void refresh();
+  window.setInterval(refresh, 60000);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
   [
     "updated", "error", "modes", "toolbar", "homeWrap", "period", "search", "playersWrap", "playerRows", "playerChart", "mapsWrap", "mapRows",
     "chartTitle", "scatter", "bands", "gamesWrap", "gameRows", "playerGames", "playerGamesTitle", "playerGameModes",
     "playerGameRows", "playerGamesClose", "gameDaysWrap", "gameDayRows",
     "leaderboardMap", "leaderboardMapLabel",
   ].forEach((id) => (el[id] = document.getElementById(id)));
-  try {
-    const response = await fetch("data/rankings.json", { cache: "no-cache" });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    state.data = await response.json();
-  } catch (error) {
-    el.error.textContent = `Could not load data (${error.message}).`;
-    el.error.hidden = false;
-    return;
-  }
-  el.updated.textContent = formatDateTime(state.data.generatedAt);
-  state.period = state.data.periods.find((p) => p.id !== "all")?.id || "all";
-  el.period.innerHTML = state.data.periods.map((p) => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join("");
-  el.period.value = state.period;
+  ["period", "leaderboardMap", "search"].forEach(id => { el[id].disabled = true; });
   el.leaderboardMap.addEventListener("change", () => {
     state.ratingMap = el.leaderboardMap.value || null;
     render();
@@ -65,7 +114,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     ["gamesWrap", "gameSort", renderGames],
   ].forEach(([id, sortState, renderRows]) => {
     document.querySelectorAll(`#${id} th[data-sort]`).forEach((header) => {
-      header.querySelector("button").addEventListener("click", () => {
+      const button = header.querySelector("button");
+      button.disabled = true;
+      button.addEventListener("click", () => {
         const key = header.dataset.sort;
         state[sortState] = {
           key,
@@ -78,11 +129,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
   setupTabNavigation();
-  window.setInterval(() => {
-    if (state.mode === "Kings" || state.mode === "Peasants") {
-      renderPlayers();
-    }
-  }, 60000);
   const twitchUrl = new URL("https://player.twitch.tv/");
   twitchUrl.search = new URLSearchParams({
     channel: "allreasonnologic",
@@ -115,7 +161,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       el.playerGames.close();
     }
   });
-  render();
+  startSiteUpdates();
 });
 
 function periodGames() {
@@ -124,6 +170,9 @@ function periodGames() {
 }
 
 function render() {
+  if (!state.data) {
+    return;
+  }
   const isHome = state.mode === "Home";
   const { mode } = state;
   el.homeWrap.hidden = !isHome;

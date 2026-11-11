@@ -9,6 +9,12 @@
     "data": "python3 -m pipeline.custom_games --no-refresh",
     "scan": "python3 -m pipeline.custom_games",
     "dev": "python3 -m http.server 4174 --directory site",
+    "deploy-site": "wrangler pages deploy site --project-name=allreasonnologic-koth --branch=main --commit-dirty=true",
+    "publish-data": "node pipeline/publish_rankings.cjs",
+    "test": "node --test tests/*.test.cjs",
     "inspect-replay": "python3 -m pipeline.local_replay"
+  },
+  "devDependencies": {
+    "wrangler": "^4.160.1"
   }
 }
