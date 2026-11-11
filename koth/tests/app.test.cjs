@@ -3,7 +3,8 @@ const { readFileSync } = require("node:fs");
 const { test } = require("node:test");
 const vm = require("node:vm");
 
-const source = readFileSync(`${__dirname}/../site/assets/app.js`, "utf8");
+const source = ["ratings.js", "app.js"]
+  .map(file => readFileSync(`${__dirname}/../site/assets/${file}`, "utf8")).join("\n");
 const context = vm.createContext({ document: { addEventListener() {} } });
 vm.runInContext(source, context);
 const compare = (key, direction, a, b) => {
@@ -13,6 +14,77 @@ const compare = (key, direction, a, b) => {
   context.b = b;
   return vm.runInContext("state.sort = { key, direction }; comparePlayers(a, b)", context);
 };
+
+function navigationContext(hash) {
+  const links = [];
+  const listeners = {};
+  const local = vm.createContext({
+    document: {
+      addEventListener() {},
+      createElement(tag) {
+        return {
+          tag, attributes: {}, active: false,
+          classList: { toggle(name, active) { this.owner.active = active; } },
+          setAttribute(name, value) { this.attributes[name] = value; },
+          removeAttribute(name) { delete this.attributes[name]; },
+        };
+      },
+    },
+    window: {
+      location: { hash },
+      addEventListener(name, callback) { listeners[name] = callback; },
+    },
+  });
+  vm.runInContext(source, local);
+  local.container = { appendChild(link) { link.classList.owner = link; links.push(link); } };
+  vm.runInContext(`
+    el.modes = container;
+    let renderCount = 0;
+    render = () => { renderCount++; };
+    setupTabNavigation();
+  `, local);
+  return { local, links, listeners };
+}
+
+for (const [mode, hash] of [
+  ["Home", "#home"], ["Kings", "#kings"], ["Peasants", "#peasants"],
+  ["Maps", "#maps"], ["Games", "#games"], ["Game days", "#game-days"],
+]) {
+  test(`direct ${hash} link selects ${mode} on initial load and reload`, () => {
+    for (let reload = 0; reload < 2; reload++) {
+      const { local, links } = navigationContext(hash);
+      assert.equal(vm.runInContext("state.mode", local), mode);
+      assert.equal(links.length, 6);
+      assert.ok(links.every(link => link.tag === "a"));
+      assert.equal(links.filter(link => link.active).length, 1);
+      const active = links.find(link => link.active);
+      assert.equal(active.href, hash);
+      assert.equal(active.textContent, mode);
+      assert.equal(active.attributes["aria-current"], "page");
+    }
+  });
+}
+
+test("hash navigation and history update content and exactly one active link", () => {
+  const { local, links, listeners } = navigationContext("#kings");
+  for (const [hash, mode] of [["#games", "Games"], ["#game-days", "Game days"],
+    ["#games", "Games"], ["#kings", "Kings"], ["#PEASANTS", "Peasants"]]) {
+    local.window.location.hash = hash;
+    listeners.hashchange();
+    assert.equal(vm.runInContext("state.mode", local), mode);
+    assert.equal(links.find(link => link.active).textContent, mode);
+    assert.equal(links.filter(link => link.attributes["aria-current"] === "page").length, 1);
+  }
+  assert.equal(vm.runInContext("renderCount", local), 5);
+});
+
+test("bare and unknown fragments default to Home", () => {
+  for (const hash of ["", "#unknown", "#%invalid"]) {
+    const { local, links } = navigationContext(hash);
+    assert.equal(vm.runInContext("state.mode", local), "Home");
+    assert.equal(links.find(link => link.active).href, "#home");
+  }
+});
 
 for (const key of ["rank", "name", "country", "score", "starting_score", "year_change", "peak", "games", "wins", "win_rate", "streak", "last_played"]) {
   test(`sort ${key} in both directions`, () => {

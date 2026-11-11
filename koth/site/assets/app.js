@@ -1,13 +1,37 @@
 const state = { data: null, mode: "Home", period: null, map: null, ratingMap: null, playerRole: "Kings", player: null, sort: { key: "rank", direction: "ascending" }, gameSort: { key: "start_time", direction: "descending" } };
 const el = {};
-const SCORE_SCALE = 42;
+const TAB_MODES = ["Home", "Kings", "Peasants", "Maps", "Games", "Game days"];
 
-function displayScore(score) {
-  return 50 / 3 + (score - 800) / SCORE_SCALE;
+function tabHash(mode) {
+  return `#${mode.toLowerCase().replaceAll(" ", "-")}`;
 }
 
-function formatScore(score) {
-  return displayScore(score).toFixed(2);
+function setupTabNavigation() {
+  const links = TAB_MODES.map((mode) => {
+    const link = document.createElement("a");
+    link.className = "mode-button";
+    link.href = tabHash(mode);
+    link.textContent = mode;
+    el.modes.appendChild(link);
+    return link;
+  });
+  const syncTab = () => {
+    state.mode = TAB_MODES.find(mode => tabHash(mode) === window.location.hash.toLowerCase()) || "Home";
+    links.forEach((link, index) => {
+      const active = TAB_MODES[index] === state.mode;
+      link.classList.toggle("active", active);
+      if (active) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    });
+  };
+  syncTab();
+  window.addEventListener("hashchange", () => {
+    syncTab();
+    render();
+  });
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -53,15 +77,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     });
   });
-  modeButtons(el.modes, ["Home", "Kings", "Peasants", "Maps", "Games", "Game days"], state.mode, (mode) => {
-    state.mode = mode;
-    render();
-    window.setInterval(() => {
-      if (state.mode === "Kings" || state.mode === "Peasants") {
-        renderPlayers();
-      }
-    }, 60000);
-  });
+  setupTabNavigation();
+  window.setInterval(() => {
+    if (state.mode === "Kings" || state.mode === "Peasants") {
+      renderPlayers();
+    }
+  }, 60000);
   const twitchUrl = new URL("https://player.twitch.tv/");
   twitchUrl.search = new URLSearchParams({
     channel: "allreasonnologic",
@@ -181,23 +202,7 @@ function countryFlag(country) {
 }
 
 function playerRankings(now = Date.now()) {
-  const rows = playerRatingScope().rankings[state.mode.toLowerCase()][state.period] || [];
-  if (state.period === "all") {
-    return rows;
-  }
-  const cutoff = Math.min(now, Date.parse(`${state.period}-12-31T23:59:59Z`));
-  const { halfLifeDays, maxGames, sigmaStart, gamesScale, scoreK } = playerRatingScope().scoreDecay;
-  const role = state.mode.toLowerCase();
-  return rows.map((row) => {
-    const { inherited, games, year, rating } = row.experience;
-    const days = Math.max(0, (cutoff - Date.parse(`${year}-01-01T00:00:00Z`)) / 86400000);
-    const effective = games + inherited * 2 ** (-days / halfLifeDays);
-    const score = rating - scoreK * sigmaStart / Math.sqrt(1 + Math.min(effective, maxGames[role]) / gamesScale[role]);
-    const roundedScore = Math.round(score * 10) / 10;
-    return { ...row, score: roundedScore, year_change: roundedScore - row.starting_score };
-  }).sort((a, b) => b.score - a.score || b.games - a.games
-      || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0))
-    .map((row, i) => ({ ...row, rank: i + 1 }));
+  return rankedPlayers(playerRatingScope(), state.mode.toLowerCase(), state.period, now);
 }
 
 function playerRatingScope() {

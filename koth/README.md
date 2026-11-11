@@ -112,6 +112,61 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
 - The expected result starts from a logistic fit on bonus and team-size ratio, shifted by the difference of the team average ratings.
 - The Kings win chance on the Games view is a separate logistic fit on bonus, team-size ratio and the mean OpenSkill gap. Its walk-forward backtest accuracy (about 66%) is written to `model.backtest` and shown on the Games view.
 
+## Direct tab links
+
+Each main tab is a real, copyable link:
+
+- [Home](https://allreasonnologic-koth.pages.dev/#home)
+- [Kings](https://allreasonnologic-koth.pages.dev/#kings)
+- [Peasants](https://allreasonnologic-koth.pages.dev/#peasants)
+- [Maps](https://allreasonnologic-koth.pages.dev/#maps)
+- [Games](https://allreasonnologic-koth.pages.dev/#games)
+- [Game days](https://allreasonnologic-koth.pages.dev/#game-days)
+
+Selecting a tab updates the URL without reloading. Reloading, bookmarking,
+sharing a link, opening a tab in a new browser tab, and Back/Forward navigation
+retain the tab indicated by the URL. The bare website URL and unrecognized
+fragments open Home. Year, map, search and table sorting remain in-page controls;
+these links preserve only the selected main tab.
+
+## Stream overlay (OBS)
+
+
+The transparent [top-three overlay](https://allreasonnologic-koth.pages.dev/overlay.html)
+shows Kings and Peasants side by side, with gold/cyan accents and the same
+Scores, yearly experience decay and tie-breaks as the website.
+It defaults to the latest published year and All maps.
+
+After deploying the site:
+
+1. In OBS, add a **Browser Source** with URL
+   `https://allreasonnologic-koth.pages.dev/overlay.html`.
+2. Set **Width 720**, **Height 220**, and leave the background transparent.
+3. Position the source over your gameplay. No StreamElements account, Twitch
+   token, chroma key or extra backend is needed.
+
+Options can be combined in the URL:
+
+- `?layout=stacked`: vertically stacked cards; use **360 x 380** in OBS.
+- `?period=all`: All time; `?period=2026`: a specific published year.
+- `?map=Claymore`: map-specific rankings; also accepts `Raptor%20Crater` or `Throne`.
+- Example: `overlay.html?layout=stacked&period=all&map=Throne`.
+
+The overlay fetches published rankings every 60 seconds (10-second timeout),
+recalculates yearly decay, and gently highlights changed rows without reloading.
+Names are safely rendered as text and long names are truncated, not wrapped.
+Reduced-motion preferences disable animations.
+Connection or invalid-data errors are logged and shown discreetly in the footer;
+previously loaded rankings remain visible and automatic retries continue.
+The footer shows the data publication time in UTC, not the last polling time.
+It does not promise live match results: new games appear only after the existing
+update workflow publishes them (normally every 20 minutes in the Sunday window).
+Invalid year/map options show an error rather than silently displaying another table.
+
+For a local preview, run `npm run dev` from this folder and open
+`http://localhost:4174/overlay.html`. Test browser calculations and overlay behavior
+with `node --test tests/app.test.cjs tests/overlay.test.cjs`.
+
 ## Automatic updates
 
 `.github/workflows/koth-update-and-deploy.yml` (in the repo root) is scheduled every Sunday every 20 minutes from 11:00 through 16:00 inclusive in `Europe/Brussels` (CET in winter, CEST in summer), on every push to `main` affecting KOTH files or the workflow, and manually. GitHub Actions scheduled runs can be delayed or dropped during busy periods; the interval is not guaranteed. It scans for new games, rebuilds `site/data/rankings.json`, commits the replay cache if it changed, and deploys to Cloudflare Pages.
