@@ -146,6 +146,18 @@ test("JSON serialization of negative zero does not create false changes or verif
   });
 });
 
+test("solver noise in experience ratings is ignored, but meaningful numeric changes still publish", () => {
+  const next = clone(fixture);
+  const row = next.rankings.kings["2026"][0];
+  row.experience.rating += Number.EPSILON * row.experience.rating;
+  assert.equal(publicationNeeded(next, fixture), false);
+  row.experience.rating += 1e-8;
+  assert.equal(publicationNeeded(next, fixture), true);
+  const modelChange = clone(fixture);
+  modelChange.model.kNew += 1e-8;
+  assert.equal(publicationNeeded(modelChange, fixture), true);
+});
+
 test("unchanged data does not deploy even when the generation timestamp changes", async () => {
   const deployments = [];
   const result = await publishRankings({

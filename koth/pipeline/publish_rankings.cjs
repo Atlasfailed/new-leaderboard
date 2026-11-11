@@ -22,10 +22,30 @@ function publicationNeeded(incoming, current) {
   if (Date.parse(incoming.generatedAt) < Date.parse(current.generatedAt)) {
     throw new Error("Refusing to overwrite a newer publication.");
   }
-  return !isDeepStrictEqual(
+  return !samePublicationValues(
     publicationContent(JSON.parse(JSON.stringify(incoming))),
     publicationContent(JSON.parse(JSON.stringify(current))),
   );
+}
+
+function samePublicationValues(left, right, experience = false) {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  // Numerical solvers can vary by a few floating-point steps between runners.
+  if (experience && typeof left === "number" && typeof right === "number") {
+    return Math.abs(left - right) <= 8 * Number.EPSILON * Math.max(1, Math.abs(left), Math.abs(right));
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((value, i) => samePublicationValues(value, right[i], experience));
+  }
+  if (left && right && typeof left === "object" && typeof right === "object") {
+    const keys = Object.keys(left);
+    return keys.length === Object.keys(right).length && keys.every(key => Object.hasOwn(right, key)
+      && samePublicationValues(left[key], right[key], experience || key === "experience"));
+  }
+  return false;
 }
 
 function publicationContent(data) {

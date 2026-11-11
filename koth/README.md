@@ -216,6 +216,8 @@ Pages deployments switch a complete data snapshot, so readers do not see partial
 uploads. The publisher validates before deploying, rejects older publications,
 ignores generation-time and browser-recomputed yearly decay/rank changes, and includes the previous live snapshot at
 `rankings/v1.previous.json` alongside `rankings/v1.json`.
+Experience values tolerate only machine-precision solver noise between runners
+(eight scaled floating-point epsilons); other published fields compare exactly.
 It verifies the public JSON and CORS/cache headers after deployment.
 Replay history remains backed up in Git. That previous snapshot is for recovery;
 publish corrections with a fresh generation time rather than making browsers
