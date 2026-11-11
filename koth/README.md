@@ -284,8 +284,48 @@ gh workflow run koth-update-data.yml --repo Atlasfailed/new-leaderboard
 ```
 
 This separation removes deployment conflicts, not GitHub runner delays. Direct
-Pi processing would be a separate later change. Home Assistant scheduling and
-Pi credentials are not configured by these workflows.
+Pi processing would be a separate later change.
+
+### Home Assistant scheduler on the Pi 5
+
+[home_assistant/koth_updates.yaml](home_assistant/koth_updates.yaml) is a
+standalone Home Assistant package. It does not touch the separate Pi 4 music
+system. It checks every five minutes on Sunday, 11:00 up to (not including)
+17:00, plus startup/automation reload within that window. Configure Home
+Assistant's time zone as **Europe/Brussels** before enabling it.
+GitHub's existing best-effort schedule remains a fallback.
+
+1. As **Atlasfailed**, create a fine-grained GitHub personal access token,
+   resource owner **Atlasfailed**, restricted to **new-leaderboard**, with
+   **Actions: Read and write**. Set an appropriate expiry and renew it before
+   expiry. It needs no Contents write or Cloudflare permissions.
+2. Privately add `koth_github_authorization` to Home Assistant's
+   `/config/secrets.yaml`, with a quoted value containing the word `Bearer`,
+   one space, and the token. Include both opening and closing quotes.
+   Never paste the token into chat, repository files or automation YAML.
+   Protect Home Assistant backups, which may contain secrets.
+3. Copy the package to `/config/packages/koth_updates.yaml`. If not already
+   enabled, merge `packages: !include_dir_named packages` into the existing
+   `homeassistant:` section of `/config/configuration.yaml`; do not replace
+   existing packages or create duplicate keys.
+4. Check configuration before loading. A first installation may need a Home
+   Assistant restart to register `rest_command`/`script`; do not restart other
+   Pi services. Later changes can use the appropriate integration reloads.
+5. Run **KOTH - request rankings update** manually once, even outside the
+   Sunday window. Verify a new **Update KOTH Rankings Data** run on GitHub.
+   Check its conclusion separately: HTTP 204 confirms dispatch, not successful
+   processing or publication. An active run is deliberately skipped.
+6. Enable **KOTH - Sunday rankings scheduler** and verify its next trace.
+   Disable that automation to pause polling; manual requests still work.
+
+Only small GitHub API requests run on the Pi 5; computation stays on GitHub.
+Lookup/dispatch errors create a persistent Home Assistant notification and an
+error trace; no unchecked dispatch is attempted after a failed lookup.
+Notifications clear after a confirmed dispatch. A timed-out POST may have
+reached GitHub, so the next check looks for active runs before retrying.
+The active-run check is best effort, not an atomic lock with GitHub's scheduler;
+the workflow's concurrency group remains the final overlap protection.
+No catch-up burst is sent for checks missed while Home Assistant is offline.
 
 ## Local use
 

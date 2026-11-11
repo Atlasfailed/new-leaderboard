@@ -1,0 +1,104 @@
+rest_command:
+  koth_workflow_runs:
+    url: "https://api.github.com/repos/Atlasfailed/new-leaderboard/actions/workflows/koth-update-data.yml/runs?branch=main&per_page=20"
+    method: get
+    timeout: 20
+    headers:
+      Authorization: !secret koth_github_authorization
+      Accept: "application/vnd.github+json"
+      X-GitHub-Api-Version: "2022-11-28"
+  koth_workflow_dispatch:
+    url: "https://api.github.com/repos/Atlasfailed/new-leaderboard/actions/workflows/koth-update-data.yml/dispatches"
+    method: post
+    timeout: 20
+    content_type: "application/json"
+    headers:
+      Authorization: !secret koth_github_authorization
+      Accept: "application/vnd.github+json"
+      X-GitHub-Api-Version: "2022-11-28"
+    payload: '{"ref":"main","inputs":{"bootstrap":false}}'
+
+script:
+  koth_refresh_rankings:
+    alias: "KOTH - request rankings update"
+    description: "Dispatch the data-only workflow unless a recent run is still active."
+    mode: single
+    sequence:
+      - action: rest_command.koth_workflow_runs
+        response_variable: koth_runs
+        continue_on_error: true
+      - if:
+          - condition: template
+            value_template: >-
+              {{ koth_runs is not defined
+                 or koth_runs.status | default(0) != 200
+                 or koth_runs.content is not mapping
+                 or koth_runs.content.workflow_runs is not defined
+                 or koth_runs.content.workflow_runs is not iterable
+                 or koth_runs.content.workflow_runs is string }}
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: koth_scheduler_error
+              title: "KOTH scheduler: GitHub lookup failed"
+              message: >-
+                Could not check active rankings workflows
+                (HTTP {{ koth_runs.status | default('no response') if koth_runs is defined else 'no response' }}).
+                No update was requested. Check connectivity, token expiry and
+                the token's Actions read/write permission.
+          - stop: "GitHub workflow lookup failed; refusing an unchecked dispatch."
+            error: true
+      - if:
+          - condition: template
+            value_template: >-
+              {{ koth_runs.content.workflow_runs
+                 | selectattr('status', 'ne', 'completed') | list | count > 0 }}
+        then:
+          - stop: "A rankings workflow is already active; this check is skipped."
+      - action: rest_command.koth_workflow_dispatch
+        response_variable: koth_dispatch
+        continue_on_error: true
+      - if:
+          - condition: template
+            value_template: >-
+              {{ koth_dispatch is not defined
+                 or koth_dispatch.status | default(0) != 204 }}
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: koth_scheduler_error
+              title: "KOTH scheduler: GitHub dispatch failed"
+              message: >-
+                GitHub did not confirm the update request
+                (HTTP {{ koth_dispatch.status | default('no response') if koth_dispatch is defined else 'no response' }}).
+                Check connectivity, token expiry and Actions write permission.
+                The next scheduled check will try again.
+          - stop: "GitHub did not confirm workflow dispatch."
+            error: true
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: koth_scheduler_error
+
+automation:
+  - id: koth_rankings_sunday_scheduler
+    alias: "KOTH - Sunday rankings scheduler"
+    description: >-
+      Every five minutes on Sundays from 11:00 until 17:00 Europe/Brussels.
+      Home Assistant must use Europe/Brussels as its configured time zone.
+      Only triggers GitHub; no rankings processing runs on the Pi.
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "/5"
+      - trigger: homeassistant
+        event: start
+      - trigger: event
+        event_type: automation_reloaded
+    conditions:
+      - condition: time
+        weekday:
+          - sun
+        after: "11:00:00"
+        before: "17:00:00"
+    actions:
+      - action: script.koth_refresh_rankings
