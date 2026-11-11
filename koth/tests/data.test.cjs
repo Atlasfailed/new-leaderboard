@@ -127,6 +127,25 @@ test("yearly decay and rank reordering alone do not consume a Pages deployment",
   assert.equal(publicationNeeded(next, current), true);
 });
 
+test("JSON serialization of negative zero does not create false changes or verification failures", async () => {
+  const incoming = clone(fixture);
+  incoming.games[0].kings[0][3] = -0;
+  const published = clone(incoming);
+  assert.ok(Object.is(incoming.games[0].kings[0][3], -0));
+  assert.ok(!Object.is(published.games[0].kings[0][3], -0));
+  assert.equal(publicationNeeded(incoming, published), false);
+  await verifyPublication(incoming, {
+    fetchData: async () => {
+      const result = response(published);
+      result.headers.set("Access-Control-Allow-Origin", "*");
+      result.headers.set("Access-Control-Expose-Headers", "ETag");
+      result.headers.set("Cache-Control", "public, max-age=0, must-revalidate");
+      return result;
+    },
+    wait: async () => assert.fail("JSON-equivalent values must pass verification immediately"),
+  });
+});
+
 test("unchanged data does not deploy even when the generation timestamp changes", async () => {
   const deployments = [];
   const result = await publishRankings({

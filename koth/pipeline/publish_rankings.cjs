@@ -22,7 +22,10 @@ function publicationNeeded(incoming, current) {
   if (Date.parse(incoming.generatedAt) < Date.parse(current.generatedAt)) {
     throw new Error("Refusing to overwrite a newer publication.");
   }
-  return !isDeepStrictEqual(publicationContent(incoming), publicationContent(current));
+  return !isDeepStrictEqual(
+    publicationContent(JSON.parse(JSON.stringify(incoming))),
+    publicationContent(JSON.parse(JSON.stringify(current))),
+  );
 }
 
 function publicationContent(data) {
@@ -48,8 +51,8 @@ async function publishRankings({
   bootstrap = false, fetchData = fetch, deploy = deployData, verify = verifyPublication,
   ensureProject = ensureDataProject,
 } = {}) {
-  const incoming = { ...validateRankings(data), schemaVersion: 1 };
-  const serialized = JSON.stringify(incoming);
+  const serialized = JSON.stringify({ ...validateRankings(data), schemaVersion: 1 });
+  const incoming = JSON.parse(serialized);
   if (Buffer.byteLength(serialized) > 25 * 1024 * 1024) {
     throw new Error("Rankings exceed Cloudflare Pages' 25 MiB per-file limit.");
   }
@@ -142,7 +145,7 @@ async function verifyPublication(incoming, {
         throw new Error(`Invalid data response or missing browser/cache headers (HTTP ${response.status}).`);
       }
       const published = validateRankings(await response.json());
-      if (!isDeepStrictEqual(incoming, published)) {
+      if (!isDeepStrictEqual(JSON.parse(JSON.stringify(incoming)), published)) {
         throw new Error("Public data does not yet match the new publication.");
       }
       return;
