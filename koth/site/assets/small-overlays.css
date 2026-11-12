@@ -1,0 +1,53 @@
+.small-overlay { width: 840px; padding: 6px 12px; }
+.small-overlay.stacked { width: 300px; }
+.small-overlay .masthead { height: 24px; }
+.small-overlay .brand { font-size: 12px; letter-spacing: 1px; }
+.small-overlay .scope { color: #b2c2d1; }
+.champions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stacked .champions { grid-template-columns: minmax(0, 1fr); }
+.champion-tile {
+  --map-accent: #8cdda5;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #ffffff24;
+  border-top: 3px solid var(--map-accent);
+  border-radius: 9px;
+  background: linear-gradient(135deg, #15202bf5, #090f17f5);
+  box-shadow: 0 3px 8px #0004;
+}
+.champion-tile.throne { --map-accent: #c5abff; }
+.champion-tile.claymore { --map-accent: #ffc184; }
+.champion-tile h1 { margin: 0 0 8px; color: var(--map-accent); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; }
+.champion-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 42px; align-items: center; gap: 6px; height: 27px; }
+.role-label { color: #f2cf70; font-size: 9px; font-weight: 700; }
+.peasants .role-label { color: #61d6f5; }
+.champion-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; font-weight: 750; }
+.champion-score { text-align: right; font-size: 12px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.small-overlay.stacked .masthead { height: auto; min-height: 24px; flex-wrap: wrap; gap: 4px; }
+.small-overlay.stacked .scope { width: 100%; }
+
+.recap-overlay { width: 640px; }
+.recap-board {
+  padding: 12px 14px 10px;
+  border: 1px solid #ffffff24;
+  border-top: 3px solid #91bbf5;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #15202bf5, #090f17f5);
+  box-shadow: 0 3px 8px #0004;
+}
+.recap-board .masthead { margin-bottom: 6px; }
+.session-summary { margin: 0 0 12px; color: #c4d1de; font-size: 11px; }
+.recap-columns, .recap-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 76px 80px 48px; align-items: center; gap: 8px; }
+.recap-columns { height: 20px; color: #9fb3c5; font-size: 8px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.5px; }
+.recap-columns > :last-child { text-align: right; }
+.recap-games { min-height: 170px; }
+.recap-row { height: 34px; border-top: 1px solid #ffffff12; font-size: 11px; }
+.game-number { color: #8397aa; font-size: 9px; font-variant-numeric: tabular-nums; }
+.game-map { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; font-weight: 700; }
+.winner { font-size: 10px; font-weight: 750; }
+.winner.kings { color: #f2cf70; }
+.winner.peasants { color: #61d6f5; }
+.teams, .duration { font-variant-numeric: tabular-nums; }
+.duration { text-align: right; }
+.page-status { margin: 8px 0 0; color: #9fb3c5; font-size: 9px; }
+.recap-empty { display: flex; align-items: center; height: 170px; color: #b2c2d1; font-size: 12px; }

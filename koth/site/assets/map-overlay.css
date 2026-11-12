@@ -1,0 +1,61 @@
+.map-overlay {
+  --map-accent: #8cdda5;
+  width: 520px;
+  padding: 8px 12px;
+}
+
+.map-overlay.throne { --map-accent: #c5abff; }
+.map-overlay.claymore { --map-accent: #ffc184; }
+.map-overlay.stacked { width: 280px; }
+
+.map-overlay .board {
+  overflow: hidden;
+  border: 1px solid #ffffff24;
+  border-top: 3px solid var(--map-accent);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #15202bf5, #090f17f5);
+  box-shadow: 0 4px 12px #0005;
+}
+
+.map-overlay .masthead {
+  height: auto;
+  min-height: 50px;
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid #ffffff12;
+}
+
+.map-overlay .brand { gap: 8px; font-size: 16px; letter-spacing: 0.4px; }
+.map-overlay .brand img { width: 24px; height: 24px; }
+.map-overlay .brand span {
+  padding: 3px 5px;
+  border: 1px solid var(--map-accent);
+  border-radius: 4px;
+  color: var(--map-accent);
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+
+.map-overlay .scope { max-width: 160px; color: #b2c2d1; font-size: 10px; }
+.map-overlay .cards { gap: 0; }
+.map-overlay .card {
+  padding: 8px 14px 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.map-overlay .peasants { border-left: 1px solid #ffffff12; }
+.map-overlay .card-heading { margin-bottom: 4px; }
+.map-overlay .card-heading h1 { font-size: 10px; letter-spacing: 1.5px; }
+.map-overlay ol { min-height: 90px; }
+.map-overlay .player { height: 30px; grid-template-columns: 18px minmax(0, 1fr) 46px; gap: 6px; }
+.map-overlay .rank { font-size: 10px; }
+.map-overlay .name { font-size: 13px; }
+.map-overlay .score { font-size: 13px; }
+.map-overlay .empty { height: 90px; font-size: 11px; }
+.map-overlay footer { padding: 0 3px; }
+.map-overlay.stacked .masthead { flex-wrap: wrap; gap: 5px; }
+.map-overlay.stacked .scope { max-width: none; width: 100%; }
+.map-overlay.stacked .peasants { border-left: 0; border-top: 1px solid #ffffff12; }

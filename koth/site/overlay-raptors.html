@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Raptors Top 3 - Stream Overlay</title>
+    <link rel="icon" href="assets/logo.jpg">
+    <link rel="stylesheet" href="assets/overlay.css">
+    <link rel="stylesheet" href="assets/map-overlay.css">
+    <script src="assets/data.js" defer></script>
+    <script src="assets/ratings.js" defer></script>
+    <script src="assets/overlay.js" defer></script>
+  </head>
+  <body>
+    <main class="overlay map-overlay raptors" id="overlay" data-map="Raptor Crater" aria-label="Raptor Crater top three players">
+      <div class="board">
+        <header class="masthead">
+          <div class="brand"><img src="assets/logo.jpg" alt="">RAPTORS <span>TOP 3</span></div>
+          <span class="scope" id="scope">Loading rankings</span>
+        </header>
+        <div class="cards">
+          <section class="card kings" aria-labelledby="kingsTitle">
+            <header class="card-heading">
+              <h1 id="kingsTitle">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 5 4 4-6 4 6 5-4-2 12H5Z M5 21h14"/></svg>
+                Kings
+              </h1>
+              <span>Score</span>
+            </header>
+            <ol id="kings" aria-label="Top Kings"></ol>
+          </section>
+          <section class="card peasants" aria-labelledby="peasantsTitle">
+            <header class="card-heading">
+              <h1 id="peasantsTitle">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 3 17 18 M3 7l4-4 M3 21 20 4 M17 3l4 4"/></svg>
+                Peasants
+              </h1>
+              <span>Score</span>
+            </header>
+            <ol id="peasants" aria-label="Top Peasants"></ol>
+          </section>
+        </div>
+      </div>
+      <footer>
+        <span id="status" role="status">Connecting to leaderboard...</span>
+        <span class="community">ALLREASONNOLOGIC</span>
+      </footer>
+      <noscript>JavaScript is required to load the leaderboard.</noscript>
+    </main>
+  </body>
+</html>

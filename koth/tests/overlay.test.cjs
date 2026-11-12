@@ -3,7 +3,7 @@ const { readFileSync } = require("node:fs");
 const { test } = require("node:test");
 const vm = require("node:vm");
 
-const source = ["data.js", "ratings.js", "overlay.js"]
+const source = ["data.js", "ratings.js", "games.js", "overlay.js", "small-overlays.js"]
   .map(file => readFileSync(`${__dirname}/../site/assets/${file}`, "utf8")).join("\n");
 const cached = JSON.parse(readFileSync(`${__dirname}/../site/data/rankings.json`, "utf8"));
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -16,7 +16,7 @@ class Element {
     this.classList = { toggle: (name, enabled) => enabled ? this.classes.add(name) : this.classes.delete(name) };
     this.animations = 0;
   }
-  append(child) { child.parent = this; this.children.push(child); }
+  append(...children) { children.forEach(child => { child.parent = this; this.children.push(child); }); }
   replaceChildren(...children) { this.children = []; children.forEach(child => this.append(child)); }
   querySelector(selector) { return this.children.find(child => `.${child.className}` === selector); }
   get lastElementChild() { return this.children.at(-1); }
@@ -24,8 +24,11 @@ class Element {
   animate() { this.animations++; }
 }
 
-function harness(search = "") {
-  const elements = Object.fromEntries(["overlay", "scope", "kings", "peasants", "status"].map(id => [id, new Element()]));
+function harness(search = "", map, mode) {
+  const elements = Object.fromEntries(["overlay", "scope", "kings", "peasants", "status",
+    "champions", "session-summary", "recap-games", "page-status"].map(id => [id, new Element()]));
+  elements.overlay.dataset.map = map;
+  elements.overlay.dataset.mode = mode;
   const errors = [];
   const intervals = [];
   const timeouts = new Map();
@@ -60,6 +63,11 @@ function harness(search = "") {
       return plain(vm.runInContext("overlayView(data, options, now)", context));
     },
     render: view => { context.view = view; vm.runInContext("renderOverlay(view)", context); },
+    smallView: (mode, data = cached, options = { layout: "side-by-side" }, now = Date.parse("2026-11-12T12:00:00Z")) => {
+      context.data = data; context.options = options; context.now = now; context.mode = mode;
+      return plain(vm.runInContext("smallOverlayView(data, options, mode, now)", context));
+    },
+    renderSmall: view => { context.view = view; vm.runInContext("renderSmallOverlay(view)", context); },
   };
 }
 
@@ -97,6 +105,37 @@ test("top threes match website calculations for every map, role and published pe
   assert.equal(JSON.stringify(cached), original);
   assert.equal(h.view().label, "2026 / All maps");
   assert.equal(h.view(cached, { map: "raptor crater", period: "all" }).label, "All time / Raptor Crater");
+});
+
+test("dedicated map pages load their own top threes without a map query", async () => {
+  for (const [slug, map] of [["raptors", "Raptor Crater"], ["throne", "Throne"], ["claymore", "Claymore"]]) {
+    const html = readFileSync(`${__dirname}/../site/overlay-${slug}.html`, "utf8");
+    const pageMap = html.match(/data-map="([^"]+)"/)?.[1];
+    assert.equal(pageMap, map);
+    const h = harness("?period=all&layout=stacked", pageMap);
+    h.start();
+    await settled();
+    const expected = h.view(cached, { map, period: "all" });
+    assert.equal(h.elements.scope.textContent, expected.label);
+    for (const role of ["kings", "peasants"]) {
+      assert.deepEqual(h.elements[role].children.map(item => item.children[1].textContent),
+        expected.players[role].map(row => row.name));
+    }
+    assert.ok(h.elements.overlay.classes.has("stacked"));
+    assert.equal(h.errors.length, 0);
+  }
+});
+
+test("dedicated map defaults retain the latest year and reject conflicting map queries visibly", async () => {
+  const h = harness("", "Throne");
+  h.start();
+  await settled();
+  assert.equal(h.elements.scope.textContent, "2026 / Throne");
+  const bad = harness("?map=Claymore", "Throne");
+  bad.start();
+  assert.match(bad.elements.status.textContent, /This overlay is for Throne/);
+  assert.equal(bad.errors.length, 1);
+  assert.equal(bad.requests.length, 0);
 });
 
 test("unknown scope or malformed data is rejected instead of showing the wrong table", () => {
@@ -236,3 +275,105 @@ test("hung requests time out after ten seconds and concurrent polls are skipped"
   await h.intervals[0].fn();
   assert.equal(h.elements.kings.children.length, 3);
 });
+
+test("champions show the website's leading player and Score for each map and period", async () => {
+  const h = harness("?period=all", undefined, "champions");
+  for (const { id: period } of cached.periods) {
+    const view = h.smallView("champions", cached, { period });
+    assert.equal(view.maps.length, 3);
+    for (const map of view.maps) {
+      const expected = h.view(cached, { period, map: map.name }, Date.parse("2026-11-12T12:00:00Z"));
+      for (const role of ["kings", "peasants"]) {
+        assert.deepEqual(map.players[role][0], expected.players[role][0]);
+      }
+    }
+  }
+  h.start();
+  await settled();
+  assert.equal(h.elements.champions.children.length, 3);
+  assert.equal(h.elements.scope.textContent, "All time");
+  assert.match(h.elements.status.textContent, /^Published/);
+  const data = plain(cached);
+  data.mapRankings.Throne.rankings.kings.all = [];
+  h.renderSmall(h.smallView("champions", data, { period: "all" }));
+  assert.equal(h.elements.champions.children[1].children[1].children[1].textContent, "No players");
+  assert.throws(() => h.smallView("champions", cached, { period: "1900" }), /Unknown period/);
+  assert.throws(() => h.smallView("champions", cached, { map: "Throne" }), /cover all maps/);
+});
+
+function recapData(games) {
+  return { generatedAt: cached.generatedAt, games: games.map(([id, start_time, winner = "kings"]) => ({
+    ...plain(cached.games[0]), id, start_time, winner,
+  })) };
+}
+
+test("recap selects the latest completed Sunday, includes Monday morning, and excludes other sessions", () => {
+  const h = harness();
+  const data = recapData([
+    ["future", "2026-11-15T04:00:00Z"],
+    ["monday", "2026-11-08T14:00:00Z", "peasants"],
+    ["saturday", "2026-11-07T04:00:00Z"],
+    ["old", "2026-11-01T04:00:00Z"],
+    ["sunday", "2026-11-08T04:00:00Z"],
+    ["monday-noon", "2026-11-09T01:00:00Z"],
+  ]);
+  const view = h.smallView("recap", data);
+  assert.equal(view.session, "2026-11-08");
+  assert.deepEqual(view.games.map(game => game.id), ["sunday", "monday"]);
+  assert.equal(view.kingsWins, 1);
+  assert.equal(view.peasantsWins, 1);
+  assert.equal(h.smallView("recap", data, { layout: "side-by-side" },
+    Date.parse("2026-11-09T00:59:59Z")).session, "2026-11-01");
+  assert.equal(h.smallView("recap", data, { layout: "side-by-side" },
+    Date.parse("2026-11-09T01:00:00Z")).session, "2026-11-08");
+  const winter = recapData([["winter", "2026-07-05T04:00:00Z"]]);
+  assert.equal(h.smallView("recap", winter, { layout: "side-by-side" },
+    Date.parse("2026-07-06T01:59:59Z")).session, null);
+  assert.equal(h.smallView("recap", winter, { layout: "side-by-side" },
+    Date.parse("2026-07-06T02:00:00Z")).session, "2026-07-05");
+  assert.throws(() => h.smallView("recap", data, { period: "all" }), /own session date/);
+});
+
+test("recap safely renders map, winner, team sizes and mm:ss; pagination includes every game", () => {
+  const h = harness();
+  const data = recapData(Array.from({ length: 7 }, (_, i) => [
+    String(i), `2026-11-08T04:${String(i).padStart(2, "0")}:00Z`, i % 2 ? "peasants" : "kings",
+  ]));
+  data.games[0].map = "<img src=x onerror=bad()>";
+  data.games[0].duration_ms = 1965600;
+  const view = h.smallView("recap", data);
+  h.renderSmall(view);
+  const list = h.elements["recap-games"];
+  assert.equal(list.children.length, 5);
+  assert.deepEqual(list.children[0].children.map(child => child.textContent),
+    ["01", "<img src=x onerror=bad()>", "Kings", "9 vs 83", "32:45"]);
+  assert.match(h.elements["session-summary"].textContent, /7 games \/ Kings 4 wins \/ Peasants 3 wins/);
+  const timer = h.intervals.find(timer => timer.delay === 12000);
+  timer.fn();
+  assert.deepEqual(list.children.map(row => row.children[0].textContent), ["06", "07"]);
+  h.renderSmall(view);
+  assert.match(h.elements["page-status"].textContent, /page 2\/2/);
+  assert.equal(h.intervals.filter(timer => timer.delay === 12000).length, 1);
+  timer.fn();
+  assert.deepEqual(list.children.map(row => row.children[0].textContent), ["01", "02", "03", "04", "05"]);
+  h.renderSmall(h.smallView("recap", recapData([])));
+  assert.match(list.children[0].textContent, /No completed Sunday games/);
+});
+
+for (const mode of ["champions", "recap"]) {
+  test(`${mode} uses shared polling, preserves saved content on failure, and recovers`, async () => {
+    const h = harness("", undefined, mode);
+    h.start();
+    await settled();
+    assert.equal(h.errors.length, 0);
+    const container = h.elements[mode === "champions" ? "champions" : "recap-games"];
+    const before = container.children.length;
+    h.fetch(async () => { throw new Error("Offline"); });
+    await h.intervals.find(timer => timer.delay === 60000).fn();
+    assert.equal(container.children.length, before);
+    assert.match(h.elements.status.textContent, /showing saved rankings/);
+    h.fetch(async () => ({ ok: true, json: async () => plain(cached) }));
+    await h.intervals.find(timer => timer.delay === 60000).fn();
+    assert.match(h.elements.status.textContent, /^Published/);
+  });
+}

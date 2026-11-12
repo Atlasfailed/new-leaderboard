@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sunday Recap - Stream Overlay</title>
+    <link rel="icon" href="assets/logo.jpg">
+    <link rel="stylesheet" href="assets/overlay.css">
+    <link rel="stylesheet" href="assets/small-overlays.css">
+    <script src="assets/data.js" defer></script>
+    <script src="assets/ratings.js" defer></script>
+    <script src="assets/games.js" defer></script>
+    <script src="assets/overlay.js" defer></script>
+    <script src="assets/small-overlays.js" defer></script>
+  </head>
+  <body>
+    <main class="overlay small-overlay recap-overlay" id="overlay" data-mode="recap" aria-label="Most recent completed Sunday KOTH session">
+      <div class="recap-board">
+        <header class="masthead">
+          <div class="brand"><img src="assets/logo.jpg" alt="">SUNDAY RECAP</div>
+          <span class="scope" id="scope">Loading games</span>
+        </header>
+        <p class="session-summary" id="session-summary">Published leaderboard games only</p>
+        <div class="recap-columns" aria-hidden="true">
+          <span>#</span><span>Map</span><span>Winner</span><span>K vs P</span><span>Duration</span>
+        </div>
+        <ol class="recap-games" id="recap-games" aria-label="Session games; team sizes are Kings versus Peasants"></ol>
+        <p class="page-status" id="page-status">Five games per page / rotates every 12 seconds</p>
+      </div>
+      <footer>
+        <span id="status" role="status">Connecting to leaderboard...</span>
+        <span class="community">ALLREASONNOLOGIC</span>
+      </footer>
+      <noscript>JavaScript is required to load the recap.</noscript>
+    </main>
+  </body>
+</html>

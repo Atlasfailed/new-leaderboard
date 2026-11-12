@@ -310,7 +310,7 @@ test("project setup uses an existing project and surfaces credential/permission 
 });
 
 function websiteHarness() {
-  const source = ["data.js", "ratings.js", "app.js"]
+  const source = ["data.js", "ratings.js", "games.js", "app.js"]
     .map(file => readFileSync(`${__dirname}/../site/assets/${file}`, "utf8")).join("\n");
   const elements = {
     updated: {}, period: {}, leaderboardMap: {}, error: { hidden: true }, playerGames: { open: false },
@@ -364,7 +364,7 @@ test("DOMContentLoaded starts polling once; changing year renders without starti
     URL, URLSearchParams, AbortController, setTimeout, clearTimeout, console,
     fetch: async () => { requests++; return response(fixture); },
   });
-  vm.runInContext(["data.js", "ratings.js", "app.js"]
+  vm.runInContext(["data.js", "ratings.js", "games.js", "app.js"]
     .map(file => readFileSync(`${__dirname}/../site/assets/${file}`, "utf8")).join("\n"), local);
   ready();
   await new Promise(resolve => setImmediate(resolve));

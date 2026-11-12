@@ -167,6 +167,50 @@ For a local preview, run `npm run dev` from this folder and open
 `http://localhost:4174/overlay.html`. Test browser calculations and overlay behavior
 with `node --test tests/app.test.cjs tests/overlay.test.cjs`.
 
+### Compact map overlays
+
+Three alternative overlays show the top three Kings and Peasants in one compact
+panel, with a map-coloured header and transparent surroundings:
+
+- [Raptors](https://allreasonnologic-koth.pages.dev/overlay-raptors.html): green;
+  uses Raptor Crater rankings across all numbered versions.
+- [Throne](https://allreasonnologic-koth.pages.dev/overlay-throne.html): violet.
+- [Claymore](https://allreasonnologic-koth.pages.dev/overlay-claymore.html): amber.
+
+After deploying, add any of these URLs as an OBS Browser Source at **520 x 230**.
+For a narrow vertical panel, append `?layout=stacked` and use **280 x 390**.
+They default to the latest published year; `?period=all` or `?period=2026`
+can be combined with the layout option. Each page is tied to its named map;
+a conflicting `map` query displays a configuration error.
+Scores, polling, publication timestamps, error handling and reduced-motion
+support are shared with the original overlay, which retains its existing design.
+Preview locally using the same filenames at `http://localhost:4174/`.
+
+### Map champions and Sunday recap
+
+- [Map champions](https://allreasonnologic-koth.pages.dev/overlay-champions.html):
+  three small map-coloured tiles, each showing its leading King and Peasant
+  and their Scores. Use **840 x 170** in OBS, or append `?layout=stacked` for
+  **300 x 420**. Defaults to the latest published year; supports `period=all`
+  or a published year, including in combination with the stacked layout.
+- [Sunday recap](https://allreasonnologic-koth.pages.dev/overlay-weekly-recap.html):
+  use **640 x 340**. Shows the most recent completed Sunday session present
+  in the published games, its actual date, game count and role win totals.
+  Every game is included chronologically, with map, winning side, team sizes
+  (Kings vs Peasants), and recorded duration in minutes:seconds.
+  Five games appear per page; pages rotate every 12 seconds without animation.
+  Uses the website's Sydney noon-to-noon session grouping, so games before
+  Monday noon stay with Sunday. A session is considered completed after
+  Monday noon Sydney time. The recap has a fixed layout and session date;
+  `period`, `map` and non-default `layout` options display an error.
+
+Both overlays use transparent backgrounds and the existing 60-second polling,
+timeout, last-good-data preservation and publication timestamp. They show
+published leaderboard games, not live results or unranked/rejected games.
+If the latest Sunday is not yet published, the recap retains the latest
+available completed session and labels its actual date; it does not claim
+that old games are from last week. Empty sessions/rankings are shown explicitly.
+
 ## Independent website and rankings updates
 
 The website and live data have separate publication paths:

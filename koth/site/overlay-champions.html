@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Map Champions - Stream Overlay</title>
+    <link rel="icon" href="assets/logo.jpg">
+    <link rel="stylesheet" href="assets/overlay.css">
+    <link rel="stylesheet" href="assets/small-overlays.css">
+    <script src="assets/data.js" defer></script>
+    <script src="assets/ratings.js" defer></script>
+    <script src="assets/games.js" defer></script>
+    <script src="assets/overlay.js" defer></script>
+    <script src="assets/small-overlays.js" defer></script>
+  </head>
+  <body>
+    <main class="overlay small-overlay" id="overlay" data-mode="champions" aria-label="Map champions">
+      <header class="masthead">
+        <div class="brand"><img src="assets/logo.jpg" alt="">MAP CHAMPIONS</div>
+        <span class="scope" id="scope">Loading rankings</span>
+      </header>
+      <div class="champions" id="champions"></div>
+      <footer>
+        <span id="status" role="status">Connecting to leaderboard...</span>
+        <span class="community">ALLREASONNOLOGIC</span>
+      </footer>
+      <noscript>JavaScript is required to load the leaderboard.</noscript>
+    </main>
+  </body>
+</html>

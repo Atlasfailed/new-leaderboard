@@ -1,10 +1,14 @@
-function overlayOptions(search) {
+function overlayOptions(search, defaultMap = null) {
   const params = new URLSearchParams(search);
   const layout = params.get("layout") || "side-by-side";
   if (!["side-by-side", "stacked"].includes(layout)) {
     throw new Error('Unknown layout. Use "side-by-side" or "stacked".');
   }
-  return { layout, period: params.get("period"), map: params.get("map") };
+  const map = params.get("map") || defaultMap;
+  if (defaultMap && map.toLowerCase() !== defaultMap.toLowerCase()) {
+    throw new Error(`This overlay is for ${defaultMap}. Use that map's overlay page instead.`);
+  }
+  return { layout, period: params.get("period"), map };
 }
 
 function overlayView(data, options, now = Date.now()) {
@@ -102,7 +106,7 @@ function overlayStatus(message, warning = false) {
   status.classList.toggle("warning", warning);
 }
 
-function startOverlay(options) {
+function startOverlay(options, buildView = overlayView, renderView = renderOverlay) {
   let data = null;
   let refreshing = false;
   const loadRankings = createRankingsLoader();
@@ -117,11 +121,11 @@ function startOverlay(options) {
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
       if (data) {
-        renderOverlay(overlayView(data, options));
+        renderView(buildView(data, options));
       }
       const incoming = await loadRankings(controller.signal);
-      const view = overlayView(incoming, options);
-      renderOverlay(view);
+      const view = buildView(incoming, options);
+      renderView(view);
       data = incoming;
       const published = new Date(view.generatedAt).toISOString().slice(0, 16).replace("T", " ");
       overlayStatus(`Published ${published} UTC`);
@@ -140,7 +144,13 @@ function startOverlay(options) {
 
 document.addEventListener("DOMContentLoaded", () => {
   try {
-    startOverlay(overlayOptions(window.location.search));
+    const element = document.getElementById("overlay");
+    const options = overlayOptions(window.location.search, element.dataset.map);
+    if (element.dataset.mode) {
+      startOverlay(options, (data, opts) => smallOverlayView(data, opts, element.dataset.mode), renderSmallOverlay);
+    } else {
+      startOverlay(options);
+    }
   } catch (error) {
     console.error("KOTH overlay configuration failed:", error);
     overlayStatus(error.message, true);
