@@ -4,11 +4,15 @@ function overlayOptions(search, defaultMap = null) {
   if (!["side-by-side", "stacked"].includes(layout)) {
     throw new Error('Unknown layout. Use "side-by-side" or "stacked".');
   }
+  const scale = Number(params.get("scale") ?? "1");
+  if (!Number.isFinite(scale) || scale < 1 || scale > 4) {
+    throw new Error("Invalid scale. Use a number from 1 to 4.");
+  }
   const map = params.get("map") || defaultMap;
   if (defaultMap && map.toLowerCase() !== defaultMap.toLowerCase()) {
     throw new Error(`This overlay is for ${defaultMap}. Use that map's overlay page instead.`);
   }
-  return { layout, period: params.get("period"), map };
+  return { layout, period: params.get("period"), map, scale };
 }
 
 function overlayView(data, options, now = Date.now()) {
@@ -146,6 +150,8 @@ document.addEventListener("DOMContentLoaded", () => {
   try {
     const element = document.getElementById("overlay");
     const options = overlayOptions(window.location.search, element.dataset.map);
+    // Layout zoom rasterizes text at the requested size instead of stretching a bitmap.
+    element.style.zoom = options.scale;
     if (element.dataset.mode) {
       startOverlay(options, (data, opts) => smallOverlayView(data, opts, element.dataset.mode), renderSmallOverlay);
     } else {

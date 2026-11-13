@@ -12,6 +12,7 @@ class Element {
   constructor() {
     this.children = [];
     this.dataset = {};
+    this.style = {};
     this.classes = new Set();
     this.classList = { toggle: (name, enabled) => enabled ? this.classes.add(name) : this.classes.delete(name) };
     this.animations = 0;
@@ -76,15 +77,50 @@ const settled = () => new Promise(resolve => setImmediate(resolve));
 test("default and explicit URL options; invalid layouts fail visibly", async () => {
   const h = harness();
   assert.deepEqual(plain(vm.runInContext('overlayOptions("")', h.context)),
-    { layout: "side-by-side", period: null, map: null });
+    { layout: "side-by-side", period: null, map: null, scale: 1 });
   assert.deepEqual(plain(vm.runInContext('overlayOptions("?layout=stacked&period=all&map=Raptor%20Crater")', h.context)),
-    { layout: "stacked", period: "all", map: "Raptor Crater" });
+    { layout: "stacked", period: "all", map: "Raptor Crater", scale: 1 });
   const bad = harness("?layout=typo");
   bad.start();
   await settled();
   assert.match(bad.elements.status.textContent, /Unknown layout/);
   assert.equal(bad.errors.length, 1);
   assert.equal(bad.requests.length, 0);
+});
+
+test("render scale applies to every overlay mode without changing rankings or layout", async () => {
+  for (const [map, mode] of [[undefined, undefined], ["Raptor Crater", undefined],
+    ["Throne", undefined], ["Claymore", undefined], [undefined, "champions"], [undefined, "recap"]]) {
+    for (const scale of [1, 1.5, 2, 4]) {
+      const h = harness(`?scale=${scale}`, map, mode);
+      h.start();
+      await settled();
+      assert.equal(h.elements.overlay.style.zoom, scale);
+      assert.equal(h.errors.length, 0);
+      assert.match(h.elements.status.textContent, /^Published /);
+      assert.ok(!h.elements.overlay.classes.has("stacked"));
+    }
+  }
+  const stacked = harness("?layout=stacked&period=all&scale=2", undefined, "champions");
+  stacked.start();
+  await settled();
+  assert.equal(stacked.elements.overlay.style.zoom, 2);
+  assert.ok(stacked.elements.overlay.classes.has("stacked"));
+  assert.equal(stacked.elements.scope.textContent, "All time");
+  const defaults = harness();
+  defaults.start();
+  assert.equal(defaults.elements.overlay.style.zoom, 1);
+});
+
+test("invalid render scales fail visibly before fetching rankings", () => {
+  for (const scale of ["", "0", "-1", "0.5", "4.1", "NaN", "Infinity", "two"]) {
+    const h = harness(`?scale=${scale}`);
+    h.start();
+    assert.match(h.elements.status.textContent, /Invalid scale/);
+    assert.ok(h.elements.status.classes.has("warning"));
+    assert.equal(h.errors.length, 1);
+    assert.equal(h.requests.length, 0);
+  }
 });
 
 test("top threes match website calculations for every map, role and published period", () => {

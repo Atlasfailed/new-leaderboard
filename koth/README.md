@@ -131,6 +131,45 @@ these links preserve only the selected main tab.
 
 ## Stream overlay (OBS)
 
+### Sharp rendering in OBS
+
+OBS Browser Sources are rasterized at their configured Width/Height. Enlarging
+a small source with scene transforms stretches those pixels and blurs the text.
+Changing only the Browser Source dimensions adds empty space: these overlays
+have fixed layout widths.
+
+All overlays support `?scale=2` (or `&scale=2` when other options are present).
+This uses browser layout zoom, not a CSS transform, so text, SVG icons, borders
+and spacing render at twice their original size. The default is `scale=1`,
+preserving existing layouts; numbers from 1 to 4 are accepted.
+Multiply **both** Browser Source dimensions by the chosen scale:
+
+| Overlay | Default source size | Source size with `scale=2` |
+| --- | --- | --- |
+| Top three | 720 x 220 | 1440 x 440 |
+| Top three, stacked | 360 x 380 | 720 x 760 |
+| Raptors / Throne / Claymore | 520 x 230 | 1040 x 460 |
+| Compact map, stacked | 280 x 390 | 560 x 780 |
+| Map champions | 840 x 170 | 1680 x 340 |
+| Map champions, stacked | 300 x 420 | 600 x 840 |
+| Sunday recap | 640 x 340 | 1280 x 680 |
+
+For example, use
+`https://allreasonnologic-koth.pages.dev/overlay-champions.html?scale=2`
+at **1680 x 340**. In OBS:
+
+1. Refresh the Browser Source cache after deployment.
+2. Use **Transform > Reset Transform** to remove old enlargement. Keep the
+   source at its rendered size for larger text, or reduce it to the desired
+   scene size; never enlarge it beyond its source resolution.
+3. If reducing it, select **Scale Filtering > Lanczos** on the source.
+   Use whole-pixel positions and avoid an additional scaled parent group.
+4. Check sharpness in a full-resolution recording/screenshot, not just a
+   resized OBS preview. Output downscaling and stream compression can still
+   soften very small text; increase the overlay's final displayed size if needed.
+
+This does not make a raster logo higher resolution or override OBS transforms.
+
 The transparent [top-three overlay](https://allreasonnologic-koth.pages.dev/overlay.html)
 shows Kings and Peasants side by side, with gold/cyan accents and the same
 Scores, yearly experience decay and tie-breaks as the website.
