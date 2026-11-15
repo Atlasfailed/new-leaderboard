@@ -31,6 +31,10 @@ def inspect_replay(replay: dict, cache: dict, api_replay: dict | None = None) ->
         report["cache_differences"] = [
             key for key in record if record[key] != cache["games"][replay_id].get(key)
         ]
+        existing = cache["games"][replay_id]
+        if ("excluded_user_ids" in replay and "excluded_user_ids" in existing
+                and replay["excluded_user_ids"] != existing["excluded_user_ids"]):
+            report["cache_differences"].append("excluded_user_ids")
     if api_replay is not None:
         if api_replay["id"] != replay_id:
             raise ValueError("API returned a different game ID.")
@@ -45,7 +49,13 @@ def import_replay(
     replay: dict, cache: dict, source: dict, api_replay: dict | None = None,
     allow_rejected: bool = False,
 ) -> dict:
+    if "excluded_user_ids" not in replay:
+        raise ValueError("Recording lacks participation analysis.")
     report = inspect_replay(replay, cache, api_replay)
+    excluded = replay["excluded_user_ids"]
+    roster = {player[0] for role in ("kings", "peasants") for player in report["game"][role]}
+    if not isinstance(excluded, list) or not all(isinstance(uid, int) and uid in roster for uid in excluded):
+        raise ValueError("Recording has invalid excluded player IDs.")
     if report.get("cache_differences") or report.get("api_differences"):
         raise ValueError(f"Replay {replay['id']} differs from the cache or API; refusing to overwrite.")
     if report["cache_status"] == "previously_rejected" and not allow_rejected:
@@ -53,10 +63,12 @@ def import_replay(
     replay_id = report["id"]
     if report["cache_status"] != "already_included":
         cache["games"][replay_id] = {**report["game"], "source": source}
+        cache["games"][replay_id]["excluded_user_ids"] = replay["excluded_user_ids"]
         cache["rejected"] = [gid for gid in cache.get("rejected", []) if gid != replay_id]
         report["import_status"] = "imported"
     else:
         existing = cache["games"][replay_id]
+        existing.setdefault("excluded_user_ids", replay["excluded_user_ids"])
         if existing.get("source", {}).get("type") == "local" and api_replay is not None:
             existing["source"]["api_available"] = True
         report["import_status"] = "already_included"

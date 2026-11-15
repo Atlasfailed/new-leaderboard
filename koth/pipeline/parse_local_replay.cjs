@@ -1,4 +1,5 @@
 const { DemoParser, DemoModel } = require("sdfz-demo-parser");
+const { analyze } = require("./replay_analysis.cjs");
 
 function toReplay(demo, started, ended) {
   const { meta, players, spectators, allyTeams, ais } = demo.info;
@@ -57,7 +58,11 @@ async function parseReplay(file) {
     if (packet.id === DemoModel.Packet.ID.STARTPLAYING && packet.data.countdown === 0) started = true;
     if (packet.id === DemoModel.Packet.ID.GAMEOVER) ended = true;
   });
-  return toReplay(await parser.parseDemo(file), started, ended);
+  const replay = toReplay(await parser.parseDemo(file), started, ended);
+  const analysis = await analyze(file);
+  if (analysis.id !== replay.id) throw new Error("Recording analysis ID does not match replay.");
+  replay.excluded_user_ids = analysis.excluded;
+  return replay;
 }
 
 module.exports = { toReplay, parseReplay };

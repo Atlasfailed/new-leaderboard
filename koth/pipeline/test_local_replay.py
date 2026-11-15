@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 from .custom_games import build_custom_rankings, classify_replay, load_cache, save_cache
 from .local_replay import import_replay, inspect_replay, main
+from .replay_analysis import analyze_file
 
 
 def replay():
@@ -17,6 +18,7 @@ def replay():
         "startTime": "2026-11-01T13:45:40.000Z",
         "Map": {"scriptName": "Raptor_Crater_V2"},
         "durationMs": 1965600,
+        "excluded_user_ids": [],
         "hasBots": False,
         "Spectators": [{"name": "Twig"}],
         "AllyTeams": [
@@ -35,6 +37,41 @@ def replay():
 
 
 class LocalReplayTests(unittest.TestCase):
+    def test_analysis_validates_roster_and_extract_size(self):
+        record = classify_replay(replay())
+        analysis = {"id": replay()["id"], "players": [1, 2, 3], "excluded": [2],
+                    "extract": {"game_id": replay()["id"]}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            with patch("koth.pipeline.replay_analysis.subprocess.run",
+                       return_value=Mock(stdout=json.dumps(analysis))):
+                self.assertEqual(analyze_file(path / "game", replay()["id"], record, path), [2])
+            self.assertLess((path / f'{replay()["id"]}.json').stat().st_size, 500000)
+            analysis["players"] = [1, 2]
+            with patch("koth.pipeline.replay_analysis.subprocess.run",
+                       return_value=Mock(stdout=json.dumps(analysis))):
+                with self.assertRaisesRegex(ValueError, "roster"):
+                    analyze_file(path / "game", replay()["id"], record, path)
+            analysis["players"] = [1, 2, 3]
+            analysis["extract"] = {"data": "x" * 500000}
+            with patch("koth.pipeline.replay_analysis.subprocess.run",
+                       return_value=Mock(stdout=json.dumps(analysis))):
+                with self.assertRaisesRegex(ValueError, "500,000-byte"):
+                    analyze_file(path / "game", replay()["id"], record, path)
+
+    def test_local_import_preserves_participation_analysis(self):
+        value = replay()
+        value["excluded_user_ids"] = [2]
+        cache = {"games": {}, "rejected": []}
+        import_replay(value, cache, {"type": "local"})
+        self.assertEqual(cache["games"][value["id"]]["excluded_user_ids"], [2])
+        value["excluded_user_ids"] = [3]
+        with self.assertRaisesRegex(ValueError, "differs"):
+            import_replay(value, cache, {"type": "local"})
+        del value["excluded_user_ids"]
+        with self.assertRaisesRegex(ValueError, "lacks participation"):
+            import_replay(value, cache, {"type": "local"})
+
     def test_import_preserves_metadata_deduplicates_and_retains_source_in_output(self):
         value = replay()
         source = {"type": "local", "file": "game.sdfz", "sha256": "a" * 64, "api_available": False}

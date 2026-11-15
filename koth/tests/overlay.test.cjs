@@ -244,7 +244,7 @@ test("polling updates rows without replacing them, shows publication time and re
   assert.equal(h.requests[0][1].cache, "no-cache");
   assert.equal(h.timeouts.size, 0);
   assert.match(h.elements.status.textContent, /^Published .* UTC$/);
-  assert.match(h.elements.status.textContent, /2026-11-03/);
+  assert.ok(h.elements.status.textContent.includes(new Date(cached.generatedAt).toISOString().slice(0, 10)));
   const item = h.elements.kings.children[0];
   const updated = plain(cached);
   updated.rankings.kings["2026"][0].name = "New name";
@@ -382,7 +382,8 @@ test("recap safely renders map, winner, team sizes and mm:ss; pagination include
   const list = h.elements["recap-games"];
   assert.equal(list.children.length, 5);
   assert.deepEqual(list.children[0].children.map(child => child.textContent),
-    ["01", "<img src=x onerror=bad()>", "Kings", "9 vs 83", "32:45"]);
+    ["01", "<img src=x onerror=bad()>", "Kings",
+      `${data.games[0].kings.length} vs ${data.games[0].peasants.length}`, "32:45"]);
   assert.match(h.elements["session-summary"].textContent, /7 games \/ Kings 4 wins \/ Peasants 3 wins/);
   const timer = h.intervals.find(timer => timer.delay === 12000);
   timer.fn();

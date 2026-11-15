@@ -179,8 +179,13 @@ def refresh_cache(cache: dict) -> dict:
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         for replay_id, replay in pool.map(fetch, candidates):
+            if replay.get("id") != replay_id:
+                raise ValueError(f"API returned the wrong replay for {replay_id}")
             record = classify_replay(replay)
             if record:
+                from .replay_analysis import EXTRACT_DIR, analyze_online
+
+                record["excluded_user_ids"] = analyze_online(replay, record, EXTRACT_DIR)
                 cache["games"][replay_id] = record
             else:
                 cache["rejected"].append(replay_id)
@@ -421,8 +426,24 @@ def leaderboard_map(name: str) -> str | None:
 
 def build_custom_rankings(cache: dict, as_of: datetime | None = None) -> dict:
     as_of = as_of or datetime.now(timezone.utc)
+    def eligible_roster(game: dict) -> dict:
+        if "excluded_user_ids" not in game:
+            raise ValueError("Game lacks participation analysis; run python -m pipeline.replay_analysis")
+        excluded = set(game["excluded_user_ids"])
+        roster = {player[0] for role in ROLES for player in game[role]}
+        if not excluded <= roster:
+            raise ValueError(f"Unknown excluded players in game starting {game['start_time']}")
+        result = {
+            **game,
+            "kings": [player for player in game["kings"] if player[0] not in excluded],
+            "peasants": list(game["peasants"]),
+        }
+        if any(not result[role] for role in ROLES):
+            raise ValueError(f"No eligible players on a team in game starting {game['start_time']}")
+        return result
+
     games_with_ids = sorted(
-        ((game_id, game) for game_id, game in cache["games"].items()
+        ((game_id, eligible_roster(game)) for game_id, game in cache["games"].items()
          if game["duration_ms"] > MIN_DURATION_MS),
         key=lambda item: item[1]["start_time"],
     )

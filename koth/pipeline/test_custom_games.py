@@ -12,6 +12,7 @@ def game(year, kings, peasants, won=True):
         "duration_ms": 600001,
         "kings_handicap": 50,
         "kings_won": won,
+        "excluded_user_ids": [],
         "kings": [[user_id, f"Player {user_id}", "BE", 25] for user_id in kings],
         "peasants": [[user_id, f"Player {user_id}", "BE", 25] for user_id in peasants],
     }
@@ -25,6 +26,53 @@ class SnapshotTests(unittest.TestCase):
             game(2026, [1, 3], [2, 4, 5, 6]),
         ]
         self.details, _ = model.run_elo(self.games, [0, 0, 0])
+
+    def test_only_early_leaving_kings_are_excluded_from_rankings_and_games(self):
+        from copy import deepcopy
+
+        original = game(2026, [1, 2], [3, 4, 5])
+        original["map"] = "Throne_V8"
+        original["excluded_user_ids"] = [2, 5]
+        expected = deepcopy(original)
+        expected["kings"] = expected["kings"][:1]
+        expected["excluded_user_ids"] = []
+        cutoff = datetime(2026, 11, 1, tzinfo=timezone.utc)
+        before = deepcopy(original)
+        result = model.build_custom_rankings({"games": {"one": original}}, cutoff)
+        self.assertEqual(result, model.build_custom_rankings({"games": {"one": expected}}, cutoff))
+        self.assertEqual(original, before)
+        for scope in (result, result["mapRankings"]["Throne"]):
+            self.assertEqual([p[0] for p in scope["games"][0]["kings"]], [1])
+            self.assertEqual([p[0] for p in scope["games"][0]["peasants"]], [3, 4, 5])
+            self.assertNotIn(2, {p["user_id"] for p in scope["rankings"]["kings"]["all"]})
+            peasant = next(p for p in scope["rankings"]["peasants"]["all"] if p["user_id"] == 5)
+            self.assertEqual((peasant["games"], peasant["wins"], peasant["losses"]), (1, 0, 1))
+
+    def test_probability_uses_kings_only_filter_in_fitted_model(self):
+        from copy import deepcopy
+
+        games = [game(2026, [1, 2], [3, 4, 5], won=i % 3 == 0) for i in range(81)]
+        games[-1]["excluded_user_ids"] = [2, 5]
+        expected = deepcopy(games)
+        expected[-1]["kings"] = expected[-1]["kings"][:1]
+        expected[-1]["excluded_user_ids"] = []
+        cutoff = datetime(2026, 11, 1, tzinfo=timezone.utc)
+        actual = model.build_custom_rankings({"games": {str(i): g for i, g in enumerate(games)}}, cutoff)
+        target = model.build_custom_rankings({"games": {str(i): g for i, g in enumerate(expected)}}, cutoff)
+        self.assertEqual(actual["model"], target["model"])
+        self.assertEqual(actual["games"], target["games"])
+
+    def test_game_with_no_eligible_team_is_not_given_a_fake_probability(self):
+        row = game(2026, [1], [2, 3])
+        row["excluded_user_ids"] = [1]
+        with self.assertRaisesRegex(ValueError, "No eligible players"):
+            model.build_custom_rankings({"games": {"one": row}})
+
+    def test_unanalyzed_game_does_not_silently_count_all_players(self):
+        row = game(2026, [1], [2, 3])
+        del row["excluded_user_ids"]
+        with self.assertRaisesRegex(ValueError, "lacks participation analysis"):
+            model.build_custom_rankings({"games": {"one": row}})
 
     def test_map_ratings_match_an_isolated_rating_run_and_do_not_mutate_cache(self):
         from copy import deepcopy

@@ -47,6 +47,44 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
 - Every Sunday since 2024-09-01 is scanned through `https://api.bar-rts.com/replays?date=YYYY-MM-DD`.
 - A replay counts when it has two teams, no bots, an API game duration strictly longer than 10 minutes (`durationMs > 600000`), one winner, exactly one team with a handicap bonus (the Kings, not the larger team), and an organizer as player or spectator. Exactly 10:00 is excluded. The duration rule applies to new scans and cache-only rebuilds, before fitting models or calculating ratings and statistics; shorter cached records are preserved but not rated.
 - Only compact per-game data is kept in `pipeline/reference/custom_games.json` (map, length, winner, bonus, players with country and OpenSkill). Rejected replay ids are kept too, so nothing is downloaded twice. Each run re-scans the last 14 days.
+- Kings who stop playing at or before five minutes of simulation time are excluded
+  from team calculations and receive no personal game or rating change.
+  Becoming a spectator counts as stopping; a King who returns to play is
+  counted again. Peasants are counted even if they leave early. This rule uses
+  recording events, not the API roster or wall time, and also applies to
+  historical games. If a team has no eligible players, the build fails rather
+  than inventing a probability.
+- Downloaded recordings are analyzed for new games. If the compact cache lacks
+  participation analysis, run `python3 -m pipeline.replay_analysis` before
+  building. The command resumes from saved progress and checks game IDs and
+  rosters; locally imported games require their original recordings in
+  `local replays/` with the recorded SHA-256 hash.
+
+### Compact recording extracts
+
+The analysis command also writes local-only JSON files to
+`analysis/replay-dataset/data/extracts/`. Each is strictly under 500,000 bytes;
+recordings are downloaded temporarily and discarded. The files retain
+participation events, original player/team IDs and the latest available team
+statistics plus periodic cumulative snapshots for metal, energy, damage and
+units. Snapshot intervals start at one minute and double as needed to fit.
+The `excluded_user_ids` field in the cache and extracts records qualifying
+early leavers from either team; only those on the Kings team are actually
+excluded from leaderboard calculations.
+Missing team statistics remain `null`; the latest recorded sample need not be
+the exact game-end value. Statistics are for engine teams, not necessarily
+individual players. Chat and input-activity statistics are not included.
+The `player_fields`, `event_fields` and `statistic_fields` arrays define the
+compact rows; each team row contains its team ID, latest values and snapshots
+(`frame` followed by statistic values). Time is in simulation frames at 30 fps.
+Event packet IDs are `6` (player connected), `39` (player disconnected), and
+`51` (team action). Disconnect parameters are `0` for connection loss, `1`
+for a deliberate quit and `2` for a kick. Team actions are `1` giveaway, `2`
+resign, `3` join team and `4` team death; for a giveaway `from_team`
+identifies the team whose units were given away.
+This local analysis output is not published with the leaderboard.
+Use `python3 -m pipeline.replay_analysis --extract-missing` to generate extracts
+missing locally for games whose participation has already been analyzed.
 
 ## Ratings
 
@@ -110,7 +148,7 @@ The YouTube embed uses the channel's uploads playlist, which lists the newest up
   This is a cosmetic rescaling, not official BAR OpenSkill or a calibration
   of per-game changes against BAR.
 - The expected result starts from a logistic fit on bonus and team-size ratio, shifted by the difference of the team average ratings.
-- The Kings win chance on the Games view is a separate logistic fit on bonus, team-size ratio and the mean OpenSkill gap. Its walk-forward backtest accuracy (about 66%) is written to `model.backtest` and shown on the Games view.
+- The Kings win chance on the Games view is a separate logistic fit on bonus, team-size ratio and the mean OpenSkill gap. Its walk-forward backtest accuracy is written to `model.backtest` and shown on the Games view. Both models use the eligible roster determined after the game, so these are retrospective calculations, not predictions available before the game started.
 
 ## Direct tab links
 
